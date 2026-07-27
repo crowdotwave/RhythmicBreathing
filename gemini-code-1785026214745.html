@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>High-Performance Breathing Visualizer</title>
+  <style>
+    :root {
+      --bg: #05040a;
+      --border-color: #06b6d4;
+      --border-glow: rgba(6, 182, 212, 0.4);
+      --text-sub: #64748b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: #93c5fd;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem;
+      overflow: hidden;
+      user-select: none;
+      /* Snappy CSS transition on color snap */
+      border: 18px solid var(--border-color) !important;
+      box-shadow: inset 0 0 35px var(--border-glow) !important;
+      transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      z-index: 10;
+    }
+
+    .mode-bar {
+      display: flex;
+      gap: 0.4rem;
+      background: #100e17;
+      padding: 0.4rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .mode-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-sub);
+      padding: 0.5rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .mode-btn.active {
+      color: #e2e8f0;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid var(--border-color);
+    }
+
+    .preset-bar {
+      display: none;
+      gap: 0.4rem;
+      background: rgba(16, 14, 23, 0.7);
+      padding: 0.3rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+    }
+
+    .preset-bar.visible {
+      display: flex;
+    }
+
+    .preset-btn {
+      background: transparent;
+      border: none;
+      color: #64748b;
+      padding: 0.25rem 0.7rem;
+      font-size: 0.75rem;
+      font-weight: 700;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .preset-btn.active {
+      color: #a855f7;
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid #a855f7;
+    }
+
+    main {
+      position: relative;
+      width: 100%;
+      height: 70vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    .text-overlay {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      pointer-events: none;
+      margin-bottom: 2vh;
+    }
+
+    .instruction {
+      font-size: 2.2rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+      transition: color 0.15s ease;
+    }
+
+    .instruction.accent {
+      color: #38bdf8;
+    }
+
+    .instruction.hold {
+      color: #f59e0b;
+    }
+
+    .instruction.purple {
+      color: #a855f7;
+    }
+
+    .instruction.cyan {
+      color: #06b6d4;
+    }
+
+    .timer-display {
+      font-size: 3.2rem;
+      font-weight: 800;
+      color: #64748b;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+      line-height: 1;
+    }
+
+    footer {
+      text-align: center;
+      max-width: 540px;
+      z-index: 10;
+    }
+
+    .description {
+      font-size: 0.85rem;
+      color: var(--text-sub);
+      line-height: 1.4;
+    }
+
+    .fullscreen-btn {
+      position: absolute;
+      bottom: 1rem;
+      right: 1rem;
+      background: #100e17;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text-sub);
+      padding: 0.4rem 0.8rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .fullscreen-btn:hover {
+      color: #93c5fd;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="mode-bar">
+      <button class="mode-btn active" onclick="setMode('resonance')">Resonance (5.5 bpm)</button>
+      <button class="mode-btn" onclick="setMode('live')">Live Flow (4-5)</button>
+      <button class="mode-btn" onclick="setMode('box')">Pre-Match Box (4-4-4-4)</button>
+      <button class="mode-btn" onclick="setMode('sigh')">Tilt Reset (Sigh)</button>
+    </div>
+
+    <div class="preset-bar visible" id="presetBar">
+      <button class="preset-btn active" onclick="setResonancePreset('optimal')">5.5s In / 5.5s Out (5.5 bpm)</button>
+      <button class="preset-btn" onclick="setResonancePreset('extended')">4s In / 6s Out (5.0 bpm)</button>
+      <button class="preset-btn" onclick="setResonancePreset('balanced')">5s In / 5s Out (6.0 bpm)</button>
+    </div>
+  </header>
+
+  <main>
+    <canvas id="stage"></canvas>
+    <div class="text-overlay">
+      <div class="instruction cyan" id="instruction">Inhale</div>
+      <div class="timer-display" id="timer">5.5</div>
+    </div>
+  </main>
+
+  <footer>
+    <p class="description" id="description">
+      Gold-standard baseline rhythm that synchronizes HRV with blood pressure oscillations (Mayer waves) to maximize calm focus at your desk.
+    </p>
+  </footer>
+
+  <button class="fullscreen-btn" onclick="toggleFullScreen()">Fullscreen ⛶</button>
+
+  <script>
+    const modes = {
+      resonance: {
+        desc: 'Gold-standard baseline rhythm that synchronizes HRV with blood pressure oscillations (Mayer waves) to maximize calm focus at your desk.',
+        minScale: 0.5,
+        maxScale: 0.9,
+        steps: [
+          { text: 'Inhale', duration: 5.5, startScale: 0.5, endScale: 0.9, type: 'inhale' },
+          { text: 'Exhale', duration: 5.5, startScale: 0.9, endScale: 0.5, type: 'exhale' }
+        ]
+      },
+      live: {
+        desc: 'No-hold ratio keeps aim steady and drops heart rate without muscle tension during active play.',
+        minScale: 0.5,
+        maxScale: 0.9,
+        steps: [
+          { text: 'Inhale', duration: 4.0, startScale: 0.5, endScale: 0.9, type: 'inhale' },
+          { text: 'Exhale', duration: 5.0, startScale: 0.9, endScale: 0.5, type: 'exhale' }
+        ]
+      },
+      box: {
+        desc: 'Symmetrical breathing to eliminate pre-game jitters and establish baseline focus.',
+        minScale: 0.5,
+        maxScale: 0.9,
+        steps: [
+          { text: 'Inhale', duration: 4.0, startScale: 0.5, endScale: 0.9, type: 'inhale' },
+          { text: 'Hold (Full)', duration: 4.0, startScale: 0.9, endScale: 0.9, type: 'hold' },
+          { text: 'Exhale', duration: 4.0, startScale: 0.9, endScale: 0.5, type: 'exhale' },
+          { text: 'Hold (Empty)', duration: 4.0, startScale: 0.5, endScale: 0.5, type: 'hold' }
+        ]
+      },
+      sigh: {
+        desc: 'Double-inhale offloads carbon dioxide fast to instantly dump adrenaline between rounds.',
+        minScale: 0.5,
+        maxScale: 0.95,
+        steps: [
+          { text: 'Inhale 1', duration: 3.0, startScale: 0.5, endScale: 0.8, type: 'inhale' },
+          { text: 'Inhale 2 (Top Up!)', duration: 1.0, startScale: 0.8, endScale: 0.95, type: 'topup' },
+          { text: 'Exhale (Sigh)', duration: 6.0, startScale: 0.95, endScale: 0.5, type: 'exhale' }
+        ]
+      }
+    };
+
+    // Color Spectrum Anchors
+    const COLOR_CYAN   = { r: 6,   g: 182, b: 212, hex: '#06b6d4', glow: 'rgba(6, 182, 212, 0.6)' };
+    const COLOR_FLASH  = { r: 56,  g: 189, b: 248, hex: '#38bdf8', glow: 'rgba(56, 189, 248, 0.95)' };
+    const COLOR_PURPLE = { r: 168, g: 85,  b: 247, hex: '#a855f7', glow: 'rgba(168, 85, 247, 0.6)' };
+    const COLOR_AMBER  = { r: 245, g: 158, b: 11,  hex: '#f59e0b', glow: 'rgba(245, 158, 11, 0.6)' };
+
+    let currentModeKey = 'resonance';
+    let stepIndex = 0;
+    let stepStartTime = performance.now();
+    let particles = [];
+    let lastStepType = null;
+
+    const canvas = document.getElementById('stage');
+    const ctx = canvas.getContext('2d');
+    const instructionEl = document.getElementById('instruction');
+    const timerEl = document.getElementById('timer');
+    const descriptionEl = document.getElementById('description');
+    const modeButtons = document.querySelectorAll('.mode-btn');
+    const presetButtons = document.querySelectorAll('.preset-btn');
+    const presetBar = document.getElementById('presetBar');
+
+    function breathEase(t) {
+      return (1 - Math.cos(t * Math.PI)) / 2;
+    }
+
+    function resizeCanvas() {
+      canvas.width = canvas.clientWidth;
+      canvas.height = canvas.clientHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function setMode(modeKey) {
+      currentModeKey = modeKey;
+      stepIndex = 0;
+      stepStartTime = performance.now();
+      particles = [];
+      lastStepType = null;
+      
+      modeButtons.forEach((btn, idx) => {
+        btn.classList.toggle('active', 
+          (modeKey === 'resonance' && idx === 0) ||
+          (modeKey === 'live' && idx === 1) ||
+          (modeKey === 'box' && idx === 2) ||
+          (modeKey === 'sigh' && idx === 3)
+        );
+      });
+
+      presetBar.classList.toggle('visible', modeKey === 'resonance');
+      descriptionEl.textContent = modes[modeKey].desc;
+    }
+
+    function setResonancePreset(preset) {
+      stepIndex = 0;
+      stepStartTime = performance.now();
+      lastStepType = null;
+
+      presetButtons.forEach((btn, idx) => {
+        btn.classList.toggle('active', 
+          (preset === 'optimal' && idx === 0) ||
+          (preset === 'extended' && idx === 1) ||
+          (preset === 'balanced' && idx === 2)
+        );
+      });
+
+      if (preset === 'optimal') {
+        modes.resonance.steps = [
+          { text: 'Inhale', duration: 5.5, startScale: 0.5, endScale: 0.9, type: 'inhale' },
+          { text: 'Exhale', duration: 5.5, startScale: 0.9, endScale: 0.5, type: 'exhale' }
+        ];
+      } else if (preset === 'extended') {
+        modes.resonance.steps = [
+          { text: 'Inhale', duration: 4.0, startScale: 0.5, endScale: 0.9, type: 'inhale' },
+          { text: 'Exhale', duration: 6.0, startScale: 0.9, endScale: 0.5, type: 'exhale' }
+        ];
+      } else if (preset === 'balanced') {
+        modes.resonance.steps = [
+          { text: 'Inhale', duration: 5.0, startScale: 0.5, endScale: 0.9, type: 'inhale' },
+          { text: 'Exhale', duration: 5.0, startScale: 0.9, endScale: 0.5, type: 'exhale' }
+        ];
+      }
+    }
+
+    function drawRoundedRect(ctx, x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+    }
+
+    function render(now) {
+      const mode = modes[currentModeKey];
+      let elapsed = (now - stepStartTime) / 1000;
+      let step = mode.steps[stepIndex];
+
+      while (elapsed >= step.duration) {
+        stepStartTime += step.duration * 1000;
+        stepIndex = (stepIndex + 1) % mode.steps.length;
+        step = mode.steps[stepIndex];
+        elapsed = (now - stepStartTime) / 1000;
+      }
+
+      instructionEl.textContent = step.text;
+      instructionEl.classList.toggle('accent', step.type === 'topup');
+      instructionEl.classList.toggle('hold', step.type === 'hold');
+      instructionEl.classList.toggle('cyan', step.type === 'inhale');
+      instructionEl.classList.toggle('purple', step.type === 'exhale');
+      
+      const secondsRemaining = (step.duration - elapsed).toFixed(1);
+      timerEl.textContent = secondsRemaining > 0 ? secondsRemaining : '0.0';
+
+      const progress = Math.min(Math.max(elapsed / step.duration, 0), 1);
+      const easedProgress = (step.type === 'hold') ? progress : breathEase(progress);
+      const currentScale = step.startScale + (step.endScale - step.startScale) * easedProgress;
+
+      // Assign explicit color targets per breath phase
+      let borderTheme;
+      if (step.type === 'topup') {
+        borderTheme = COLOR_FLASH;
+      } else if (step.type === 'inhale') {
+        borderTheme = COLOR_CYAN;
+      } else if (step.type === 'exhale') {
+        borderTheme = COLOR_PURPLE;
+      } else if (step.type === 'hold') {
+        borderTheme = COLOR_AMBER;
+      }
+
+      // Snappy Border Color Update: Snap color instantly on phase trigger
+      if (lastStepType !== step.type) {
+        document.documentElement.style.setProperty('--border-color', borderTheme.hex);
+        document.documentElement.style.setProperty('--border-glow', borderTheme.glow);
+        lastStepType = step.type;
+      }
+
+      let activeColor = borderTheme;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const centerX = canvas.width / 2;
+      const centerY = (canvas.height / 2) - 20;
+      const maxRadius = Math.min(canvas.width, canvas.height) * 0.35;
+      const radius = maxRadius * currentScale;
+
+      // -------------------------------------------------------------
+      // 1. VERTICAL VOLUME PACING BAR
+      // -------------------------------------------------------------
+      const barHeight = maxRadius * 2.3;
+      const barWidth = 40;
+      const mainBarX = centerX - maxRadius * 2.1 - barWidth;
+      const mainBarY = centerY - barHeight / 2;
+
+      const modeMin = mode.minScale;
+      const modeMax = mode.maxScale;
+      const fillPercent = Math.max(0, Math.min(1, (currentScale - modeMin) / (modeMax - modeMin)));
+      
+      const currentFillHeight = barHeight * fillPercent;
+      const fillY = mainBarY + barHeight - currentFillHeight;
+
+      // Volume Bar Track
+      ctx.save();
+      drawRoundedRect(ctx, mainBarX, mainBarY, barWidth, barHeight, 12);
+      ctx.fillStyle = 'rgba(16, 14, 23, 0.85)';
+      ctx.fill();
+      ctx.strokeStyle = step.type === 'hold' ? 'rgba(255, 255, 255, 0.2)' : borderTheme.hex;
+      ctx.lineWidth = step.type === 'topup' ? 4 : 2;
+      ctx.shadowColor = borderTheme.hex;
+      ctx.shadowBlur = step.type === 'topup' ? 22 : 12;
+      ctx.stroke();
+      ctx.restore();
+
+      // Volume Bar Fill
+      if (currentFillHeight > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(mainBarX, fillY, barWidth, currentFillHeight);
+        ctx.clip();
+
+        drawRoundedRect(ctx, mainBarX, mainBarY, barWidth, barHeight, 12);
+        const barGrad = ctx.createLinearGradient(mainBarX, mainBarY + barHeight, mainBarX, mainBarY);
+        barGrad.addColorStop(0, `rgba(${activeColor.r}, ${activeColor.g}, ${activeColor.b}, 0.25)`);
+        barGrad.addColorStop(1, activeColor.hex);
+
+        ctx.fillStyle = barGrad;
+        ctx.shadowColor = activeColor.hex;
+        ctx.shadowBlur = step.type === 'topup' ? 26 : 16;
+        ctx.fill();
+        ctx.restore();
+
+        // Leading Edge Line
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = 10;
+        ctx.fillRect(mainBarX - 3, fillY - 2, barWidth + 6, 4);
+        ctx.restore();
+      }
+
+      // Live Readout Above Volume Bar
+      ctx.save();
+      ctx.fillStyle = activeColor.hex;
+      ctx.font = '800 12px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${Math.round(fillPercent * 100)}%`, mainBarX + barWidth / 2, mainBarY - 12);
+      ctx.restore();
+
+      // -------------------------------------------------------------
+      // 2. HORIZONTAL HOLD TIMER BAR
+      // -------------------------------------------------------------
+      if (step.type === 'hold') {
+        const holdBarWidth = maxRadius * 2.2;
+        const holdBarHeight = 22;
+        const holdBarX = centerX - holdBarWidth / 2;
+        const holdBarY = centerY - maxRadius - 50;
+
+        const holdRemainingPercent = 1 - progress;
+        const currentHoldFillWidth = holdBarWidth * holdRemainingPercent;
+        const holdFillX = centerX - currentHoldFillWidth / 2;
+
+        // Hold Track Backing
+        ctx.save();
+        drawRoundedRect(ctx, holdBarX, holdBarY, holdBarWidth, holdBarHeight, 10);
+        ctx.fillStyle = 'rgba(16, 14, 23, 0.85)';
+        ctx.fill();
+        ctx.strokeStyle = COLOR_AMBER.hex;
+        ctx.lineWidth = 2;
+        ctx.shadowColor = COLOR_AMBER.hex;
+        ctx.shadowBlur = 16;
+        ctx.stroke();
+        ctx.restore();
+
+        // Hold Track Fill
+        if (currentHoldFillWidth > 0) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(holdFillX, holdBarY, currentHoldFillWidth, holdBarHeight);
+          ctx.clip();
+
+          drawRoundedRect(ctx, holdBarX, holdBarY, holdBarWidth, holdBarHeight, 10);
+          const holdGrad = ctx.createLinearGradient(holdBarX, holdBarY, holdBarX + holdBarWidth, holdBarY);
+          holdGrad.addColorStop(0, COLOR_AMBER.hex);
+          holdGrad.addColorStop(0.5, 'rgba(245, 158, 11, 0.4)');
+          holdGrad.addColorStop(1, COLOR_AMBER.hex);
+
+          ctx.fillStyle = holdGrad;
+          ctx.shadowColor = COLOR_AMBER.hex;
+          ctx.shadowBlur = 18;
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // Hold Header Label
+        ctx.save();
+        ctx.fillStyle = COLOR_AMBER.hex;
+        ctx.font = '800 11px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('PAUSE DURATION', centerX, holdBarY - 10);
+        ctx.restore();
+      }
+
+      // -------------------------------------------------------------
+      // 3. TILT RESET (SIGH) SPECIFIC NOTCH MARKER
+      // -------------------------------------------------------------
+      if (currentModeKey === 'sigh') {
+        const topUpThreshold = (0.8 - modeMin) / (modeMax - modeMin);
+        const notchY = mainBarY + barHeight - (barHeight * topUpThreshold);
+
+        ctx.save();
+        ctx.strokeStyle = step.type === 'topup' ? '#38bdf8' : 'rgba(255, 255, 255, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(mainBarX - 8, notchY);
+        ctx.lineTo(mainBarX + barWidth + 8, notchY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = step.type === 'topup' ? '#38bdf8' : 'rgba(255, 255, 255, 0.5)';
+        ctx.font = '700 11px -apple-system, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText('TOP UP ➔', mainBarX - 12, notchY + 4);
+        ctx.restore();
+
+        if (step.type === 'topup' && Math.random() < 0.6) {
+          particles.push({
+            x: mainBarX + Math.random() * barWidth,
+            y: fillY,
+            vy: -Math.random() * 3 - 2,
+            size: Math.random() * 3 + 2,
+            alpha: 1.0
+          });
+        }
+      }
+
+      // Surge Particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.y += p.vy;
+        p.alpha -= 0.04;
+        if (p.alpha <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+        ctx.save();
+        ctx.fillStyle = `rgba(56, 189, 248, ${p.alpha})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // -------------------------------------------------------------
+      // MAIN ORB & TRACKING RING
+      // -------------------------------------------------------------
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius * 1.18, 0, Math.PI * 2);
+      ctx.strokeStyle = borderTheme.hex;
+      ctx.lineWidth = step.type === 'topup' ? 8 : 6;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, Math.max(radius, 10), 0, Math.PI * 2);
+      
+      const grad = ctx.createRadialGradient(
+        centerX - radius * 0.2, 
+        centerY - radius * 0.2, 
+        radius * 0.05, 
+        centerX, 
+        centerY, 
+        radius
+      );
+      
+      grad.addColorStop(0, `rgba(${activeColor.r}, ${activeColor.g}, ${activeColor.b}, 0.95)`);
+      grad.addColorStop(0.65, `rgba(${Math.max(0, activeColor.r - 35)}, ${Math.max(0, activeColor.g - 35)}, ${Math.max(0, activeColor.b - 15)}, 0.85)`);
+      grad.addColorStop(1, '#05040a');
+      
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      requestAnimationFrame(render);
+    }
+
+    function toggleFullScreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {});
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    stepStartTime = performance.now();
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
