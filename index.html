@@ -1,634 +1,1552 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>High-Performance Breathing Visualizer</title>
-  <style>
-    :root {
-      --bg: #05040a;
-      --border-color: #06b6d4;
-      --border-glow: rgba(6, 182, 212, 0.4);
-      --text-sub: #64748b;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#05030f">
+<meta name="description" content="A precision breathing pacer for four evidence-backed protocols: full relaxation, optimal performance, clear-mind meditation and anxiety reset.">
+<title>Breath Sync — Physiological Pacer</title>
+<style>
+/* ============================================================
+   BREATH SYNC
+   Single file. No dependencies. No GPU acceleration required.
+   Every animated pixel goes through one 2D canvas that blits a
+   pre-rendered background and pre-rendered glow sprites — no
+   per-frame shadowBlur, no filters, no backdrop-filter.
+   ============================================================ */
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
+:root{
+  --void:#05030f;
+  --void-2:#0a0619;
+  --cyan:#22e4ff;
+  --magenta:#ff2e9a;
+  --violet:#a855f7;
+  --amber:#ff9a3c;
+  --ink:#efeaff;
+  --muted:#8f86bd;
+  --dim:#5d5687;
+  --line:rgba(168,150,255,.14);
+  --panel:rgba(20,12,40,.58);
+  --panel-2:rgba(28,17,54,.62);
+  --accent:#a855f7;
+  --accent-rgb:168,85,247;
+  --radius:14px;
+  --ff:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+}
 
-    body {
-      background-color: var(--bg);
-      color: #93c5fd;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: space-between;
-      padding: 1rem;
-      overflow: hidden;
-      user-select: none;
-      /* Snappy CSS transition on color snap */
-      border: 18px solid var(--border-color) !important;
-      box-shadow: inset 0 0 35px var(--border-glow) !important;
-      transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    }
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--void);
+  color:var(--ink);
+  font-family:var(--ff);
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+  -webkit-tap-highlight-color:transparent;
+  user-select:none;
+}
 
-    header {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.5rem;
-      z-index: 10;
-    }
+#stage{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0}
 
-    .mode-bar {
-      display: flex;
-      gap: 0.4rem;
-      background: #100e17;
-      padding: 0.4rem;
-      border-radius: 999px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-    }
+.topbar{grid-row:1}
+.body{grid-row:2}
+.dock{grid-row:3}
 
-    .mode-btn {
-      background: transparent;
-      border: none;
-      color: var(--text-sub);
-      padding: 0.5rem 1rem;
-      font-size: 0.85rem;
-      font-weight: 700;
-      border-radius: 999px;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
+.shell{
+  position:relative;z-index:1;
+  height:100vh;height:100dvh;
+  display:grid;
+  grid-template-rows:auto 1fr auto;
+  padding:clamp(10px,1.4vh,18px) clamp(10px,1.6vw,22px);
+  padding-bottom:max(clamp(10px,1.4vh,18px),env(safe-area-inset-bottom));
+  gap:clamp(8px,1.2vh,14px);
+}
 
-    .mode-btn.active {
-      color: #e2e8f0;
-      background: rgba(255, 255, 255, 0.12);
-      border: 1px solid var(--border-color);
-    }
+/* ---------- micro type ---------- */
+.micro{
+  font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--dim);font-weight:700;
+}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
 
-    .preset-bar {
-      display: none;
-      gap: 0.4rem;
-      background: rgba(16, 14, 23, 0.7);
-      padding: 0.3rem 0.6rem;
-      border-radius: 999px;
-      border: 1px solid rgba(168, 85, 247, 0.3);
-    }
+/* ---------- top bar ---------- */
+.topbar{
+  display:flex;align-items:center;gap:14px;
+  min-height:38px;
+}
+.brand{display:flex;align-items:center;gap:9px;flex:0 0 auto}
+.mark{
+  width:16px;height:16px;border-radius:50%;
+  background:
+    radial-gradient(circle at 34% 32%, #fff 0 8%, rgba(var(--accent-rgb),.95) 32%, rgba(var(--accent-rgb),.15) 68%, transparent 72%);
+  border:1px solid rgba(var(--accent-rgb),.75);
+}
+.brand b{
+  font-size:12.5px;letter-spacing:.3em;font-weight:800;color:var(--ink);
+}
+.brand b i{color:var(--accent);font-style:normal}
 
-    .preset-bar.visible {
-      display: flex;
-    }
+.hud{display:flex;gap:clamp(10px,2vw,26px);margin-left:auto;align-items:flex-end}
+.stat{display:flex;flex-direction:column;gap:2px;align-items:flex-end;line-height:1}
+.stat .v{font-size:clamp(15px,2.1vw,20px);font-weight:750;letter-spacing:.01em}
+.stat.hero .v{font-size:clamp(19px,2.7vw,26px);color:#fff}
+.stat.hero .v small{font-size:.52em;color:var(--muted);font-weight:700;margin-left:3px;letter-spacing:.06em}
+.stat.flash .v{color:var(--amber)}
 
-    .preset-btn {
-      background: transparent;
-      border: none;
-      color: #64748b;
-      padding: 0.25rem 0.7rem;
-      font-size: 0.75rem;
-      font-weight: 700;
-      border-radius: 999px;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
+.tools{display:flex;gap:6px;flex:0 0 auto;margin-left:clamp(8px,1.6vw,20px)}
+.tool{
+  appearance:none;border:1px solid var(--line);background:var(--panel);
+  color:var(--muted);border-radius:10px;cursor:pointer;
+  height:32px;min-width:32px;padding:0 9px;
+  font-family:var(--ff);font-size:10px;font-weight:750;letter-spacing:.12em;
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;
+  transition:color .12s linear,border-color .12s linear,background-color .12s linear;
+}
+.tool:hover{color:var(--ink);border-color:rgba(var(--accent-rgb),.5)}
+.tool[aria-pressed="true"]{color:#fff;border-color:rgba(var(--accent-rgb),.85);background:rgba(var(--accent-rgb),.16)}
+.tool svg{width:13px;height:13px;display:block}
+.stat .micro{white-space:nowrap}
 
-    .preset-btn.active {
-      color: #a855f7;
-      background: rgba(168, 85, 247, 0.15);
-      border: 1px solid #a855f7;
-    }
+/* ---------- body grid ---------- */
+.body{
+  display:grid;
+  grid-template-columns:clamp(178px,15.5vw,214px) minmax(0,1fr) clamp(232px,20vw,290px);
+  gap:clamp(10px,1.4vw,18px);
+  min-height:0;
+}
 
-    main {
-      position: relative;
-      width: 100%;
-      height: 70vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-end;
-    }
+/* ---------- mode rail ---------- */
+.rail{display:flex;flex-direction:column;gap:8px;min-height:0}
+.mode{
+  position:relative;text-align:left;cursor:pointer;
+  border:1px solid var(--line);border-radius:var(--radius);
+  background:var(--panel);color:var(--muted);
+  padding:11px 12px 11px 15px;
+  font-family:var(--ff);
+  display:flex;flex-direction:column;gap:3px;
+  transition:border-color .14s linear,background-color .14s linear,color .14s linear;
+  overflow:hidden;flex:1 1 auto;justify-content:center;
+}
+.mode::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:2px;
+  background:var(--mc);opacity:.3;transition:opacity .14s linear,width .14s linear;
+}
+.mode:hover{color:var(--ink);border-color:rgba(255,255,255,.2)}
+.mode[aria-checked="true"]{
+  color:var(--ink);
+  background:linear-gradient(100deg,rgba(var(--mcr),.17),rgba(var(--mcr),.05) 62%,transparent);
+  border-color:rgba(var(--mcr),.55);
+}
+.mode[aria-checked="true"]::before{opacity:1;width:3px}
+.mode .n{font-size:13.5px;font-weight:760;letter-spacing:.02em;color:inherit}
+.mode[aria-checked="true"] .n{color:#fff}
+.mode .t{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;font-weight:700;color:var(--mc);opacity:.85}
+.mode .p{font-size:10.5px;color:var(--dim);letter-spacing:.04em;font-variant-numeric:tabular-nums}
+.mode .d{font-size:10.5px;line-height:1.45;color:var(--dim);margin-top:4px;opacity:.85}
+.mode[aria-checked="true"] .d{color:var(--muted)}
+.mode kbd{
+  position:absolute;right:9px;top:9px;font:inherit;font-size:9px;font-weight:800;
+  color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:1px 4px;
+  line-height:1.35;
+}
+.mode[aria-checked="true"] kbd{color:var(--mc);border-color:rgba(var(--mcr),.5)}
 
-    canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 1;
-    }
+/* ---------- stage ---------- */
+.stagezone{position:relative;min-height:0;min-width:0}
+.chip{
+  position:absolute;left:50%;top:2px;transform:translateX(-50%);
+  border:1px solid var(--line);background:var(--panel);
+  border-radius:999px;padding:4px 11px;
+  font-size:9px;letter-spacing:.24em;font-weight:800;text-transform:uppercase;
+  color:var(--muted);white-space:nowrap;
+}
+.chip.live{color:#fff;border-color:rgba(var(--accent-rgb),.6);background:rgba(var(--accent-rgb),.16)}
 
-    .text-overlay {
-      position: relative;
-      z-index: 2;
-      text-align: center;
-      pointer-events: none;
-      margin-bottom: 2vh;
-    }
+/* ---------- protocol panel ---------- */
+.panel{
+  border:1px solid var(--line);border-radius:var(--radius);
+  background:var(--panel);
+  padding:13px 14px;
+  display:flex;flex-direction:column;gap:11px;
+  min-height:0;overflow:auto;scrollbar-width:thin;
+}
+.panel h2{font-size:15px;font-weight:770;letter-spacing:.01em;color:#fff;line-height:1.2}
+.rowline{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.pattern{
+  font-size:23px;font-weight:800;color:var(--accent);letter-spacing:.03em;line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.rate{font-size:10.5px;color:var(--muted);letter-spacing:.08em;font-weight:700}
+.seglist{display:flex;flex-direction:column;gap:5px}
+.variant{
+  appearance:none;cursor:pointer;text-align:left;font-family:var(--ff);
+  border:1px solid var(--line);background:transparent;color:var(--muted);
+  border-radius:9px;padding:7px 10px;
+  display:flex;align-items:center;gap:9px;
+  transition:border-color .12s linear,color .12s linear,background-color .12s linear;
+}
+.variant:hover{color:var(--ink);border-color:rgba(255,255,255,.22)}
+.variant[aria-checked="true"]{
+  color:#fff;border-color:rgba(var(--accent-rgb),.6);background:rgba(var(--accent-rgb),.13);
+}
+.variant .vp{font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:.03em;min-width:56px}
+.variant .vn{font-size:10px;color:var(--dim);letter-spacing:.05em}
+.variant[aria-checked="true"] .vn{color:var(--muted)}
+.copy{font-size:11.5px;line-height:1.55;color:var(--muted)}
+.copy b{color:var(--ink);font-weight:700}
+.evidence{
+  font-size:10px;line-height:1.5;color:var(--dim);
+  border-left:2px solid rgba(var(--accent-rgb),.4);padding-left:9px;
+}
+.evidence a{color:var(--muted);text-decoration:none;border-bottom:1px solid rgba(255,255,255,.18)}
+.evidence a:hover{color:var(--ink)}
+.divider{height:1px;background:var(--line)}
+.form{list-style:none;display:flex;flex-direction:column;gap:5px}
+.form li{
+  font-size:10.5px;line-height:1.4;color:var(--muted);
+  padding-left:13px;position:relative;
+}
+.form li::before{
+  content:"";position:absolute;left:0;top:5px;width:5px;height:5px;border-radius:50%;
+  background:rgba(var(--accent-rgb),.75);
+}
+.record{
+  margin-top:auto;border-top:1px solid var(--line);padding-top:10px;
+  display:flex;align-items:baseline;gap:8px;
+}
+.record .rv{font-size:19px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1}
+.record .rl{font-size:10px;color:var(--dim);letter-spacing:.06em}
 
-    .instruction {
-      font-size: 2.2rem;
-      font-weight: 800;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #94a3b8;
-      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
-      transition: color 0.15s ease;
-    }
+/* ---------- dock ---------- */
+.dock{display:flex;flex-direction:column;gap:9px}
+.timeline{display:flex;gap:5px;height:34px}
+.seg{
+  position:relative;flex:1 1 auto;min-width:0;
+  border:1px solid var(--line);border-radius:9px;overflow:hidden;
+  background:rgba(12,7,26,.5);
+  transition:border-color .12s linear;
+}
+.seg.on{border-color:rgba(var(--sc),.7)}
+.seg i{
+  position:absolute;inset:0;transform-origin:left center;transform:scaleX(0);
+  background:linear-gradient(90deg,rgba(var(--sc),.42),rgba(var(--sc),.2));
+  will-change:transform;
+}
+.seg span{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:6px;
+  font-size:10px;font-weight:750;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--dim);white-space:nowrap;padding:0 4px;
+}
+.seg.on span{color:#fff}
+.seg span em{font-style:normal;font-variant-numeric:tabular-nums;opacity:.6;letter-spacing:.02em}
 
-    .instruction.accent {
-      color: #38bdf8;
-    }
+.transport{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.btn{
+  appearance:none;cursor:pointer;font-family:var(--ff);
+  border:1px solid rgba(var(--accent-rgb),.5);
+  background:rgba(var(--accent-rgb),.14);
+  color:#fff;border-radius:11px;height:38px;padding:0 20px;
+  font-size:11.5px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;
+  display:inline-flex;align-items:center;gap:9px;
+  transition:background-color .12s linear,border-color .12s linear;
+}
+.btn:hover{background:rgba(var(--accent-rgb),.24)}
+.btn.ghost{background:transparent;border-color:var(--line);color:var(--muted)}
+.btn.ghost:hover{color:var(--ink);border-color:rgba(255,255,255,.24)}
+.btn svg{width:12px;height:12px}
 
-    .instruction.hold {
-      color: #f59e0b;
-    }
+.target{flex:1 1 190px;min-width:120px;display:flex;flex-direction:column;gap:5px}
+.target .bar{height:3px;border-radius:2px;background:rgba(255,255,255,.09);overflow:hidden}
+.target .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s linear}
+.hints{
+  margin-left:auto;font-size:9.5px;letter-spacing:.14em;color:var(--dim);
+  text-transform:uppercase;font-weight:700;white-space:nowrap;
+}
+.hints b{color:var(--muted);font-weight:800}
 
-    .instruction.purple {
-      color: #a855f7;
-    }
+/* ---------- focus mode ---------- */
+.shell.focus .topbar,
+.shell.focus .rail,
+.shell.focus .panel,
+.shell.focus .timeline,
+.shell.focus .target,
+.shell.focus .hints{display:none}
+.shell.focus .body{grid-template-columns:minmax(0,1fr)}
+.shell.focus .transport{justify-content:center;opacity:.5;transition:opacity .2s linear}
+.shell.focus .transport:hover,.shell.focus .transport:focus-within{opacity:1}
+#btnExitFocus{display:none}
+.shell.focus #btnExitFocus{display:inline-flex}
 
-    .instruction.cyan {
-      color: #06b6d4;
-    }
-
-    .timer-display {
-      font-size: 3.2rem;
-      font-weight: 800;
-      color: #64748b;
-      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
-      line-height: 1;
-    }
-
-    footer {
-      text-align: center;
-      max-width: 540px;
-      z-index: 10;
-    }
-
-    .description {
-      font-size: 0.85rem;
-      color: var(--text-sub);
-      line-height: 1.4;
-    }
-
-    .fullscreen-btn {
-      position: absolute;
-      bottom: 1rem;
-      right: 1rem;
-      background: #100e17;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      color: var(--text-sub);
-      padding: 0.4rem 0.8rem;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 0.8rem;
-      font-weight: 600;
-    }
-
-    .fullscreen-btn:hover {
-      color: #93c5fd;
-    }
-  </style>
+/* ---------- responsive ---------- */
+@media (max-width:1080px){
+  .mode .d{display:none}
+  .body{grid-template-columns:clamp(150px,22vw,190px) minmax(0,1fr)}
+  .panel{
+    grid-column:1 / -1;flex-direction:row;flex-wrap:wrap;align-items:flex-start;
+    gap:12px 18px;max-height:none;
+  }
+  .panel .copy,.panel .evidence{flex:1 1 260px}
+  .panel .seglist{flex:0 0 auto;flex-direction:row}
+  .panel .divider{display:none}
+  .body{grid-template-rows:minmax(0,1fr) auto}
+}
+@media (max-width:720px){
+  .body{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
+  .hud{gap:14px}
+  #btnQuality,#btnFocus,.tlabel{display:none}
+  .tool{padding:0 8px}
+  .panel .seglist{overflow-x:auto;scrollbar-width:none;flex:1 1 100%}
+  .panel .seglist::-webkit-scrollbar{display:none}
+  .variant{flex:0 0 auto}
+  .panel .form,.panel .record{display:none}
+  .target{display:none}
+  .mode .d{display:none}
+  .rail{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:2px;scrollbar-width:none}
+  .rail::-webkit-scrollbar{display:none}
+  .mode{flex:0 0 auto;min-width:132px;padding:8px 10px 8px 12px}
+  .mode kbd{display:none}
+  .mode .p{display:none}
+  .panel{padding:11px}
+  .panel .evidence{display:none}
+  .hud .stat.wide{display:none}
+  .hints{display:none}
+  .seg span{font-size:9px;letter-spacing:.08em}
+  .seg span em{display:none}
+  .btn{padding:0 15px;height:36px}
+}
+@media (max-width:430px){
+  .brand b{display:none}
+  .seg span{letter-spacing:0}
+}
+@media (max-height:800px){ .mode .d{display:none} }
+@media (max-height:620px){ .mode .p{display:none} }
+@media (prefers-reduced-motion:reduce){
+  *{transition-duration:.01ms !important}
+}
+noscript{display:block;padding:24px;color:var(--muted);font-size:14px}
+</style>
 </head>
 <body>
 
-  <header>
-    <div class="mode-bar">
-      <button class="mode-btn active" onclick="setMode('resonance')">Resonance (5.5 bpm)</button>
-      <button class="mode-btn" onclick="setMode('live')">Live Flow (4-5)</button>
-      <button class="mode-btn" onclick="setMode('box')">Pre-Match Box (4-4-4-4)</button>
-      <button class="mode-btn" onclick="setMode('sigh')">Tilt Reset (Sigh)</button>
+<canvas id="stage" aria-hidden="true"></canvas>
+
+<div class="shell" id="shell">
+
+  <!-- ══ TOP BAR ══ -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <b>BREATH<i>/</i>SYNC</b>
     </div>
 
-    <div class="preset-bar visible" id="presetBar">
-      <button class="preset-btn active" onclick="setResonancePreset('optimal')">5.5s In / 5.5s Out (5.5 bpm)</button>
-      <button class="preset-btn" onclick="setResonancePreset('extended')">4s In / 6s Out (5.0 bpm)</button>
-      <button class="preset-btn" onclick="setResonancePreset('balanced')">5s In / 5s Out (6.0 bpm)</button>
+    <div class="hud">
+      <div class="stat"><span class="micro">Session</span><span class="v num" id="hudTime">0:00</span></div>
+      <div class="stat wide"><span class="micro">Total breaths</span><span class="v num" id="hudTotal">0</span></div>
+      <div class="stat hero" title="Consecutive breath cycles without pausing, resetting or switching protocol.">
+        <span class="micro">In a row</span>
+        <span class="v num" id="hudRun">0</span>
+      </div>
+      <div class="stat" id="bestStat"><span class="micro">Best</span><span class="v num" id="hudBest">0</span></div>
+    </div>
+
+    <div class="tools">
+      <button class="tool" id="btnSound" aria-pressed="false" title="Phase cue tones (S)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+        <span class="tlabel">CUES</span>
+      </button>
+      <button class="tool" id="btnQuality" title="Render quality — drop to Lite on slow or software-rendered machines">AUTO</button>
+      <button class="tool" id="btnFocus" aria-pressed="false" title="Focus mode (F)">FOCUS</button>
+      <button class="tool" id="btnFull" title="Fullscreen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+      </button>
     </div>
   </header>
 
-  <main>
-    <canvas id="stage"></canvas>
-    <div class="text-overlay">
-      <div class="instruction cyan" id="instruction">Inhale</div>
-      <div class="timer-display" id="timer">5.5</div>
+  <!-- ══ BODY ══ -->
+  <div class="body">
+    <nav class="rail" id="rail" role="radiogroup" aria-label="Protocol"></nav>
+
+    <section class="stagezone" id="stagezone">
+      <div class="chip" id="chip">Preview — press start</div>
+    </section>
+
+    <aside class="panel" id="panel">
+      <div>
+        <h2 id="pName">—</h2>
+        <div class="rowline" style="margin-top:6px">
+          <span class="pattern num" id="pPattern">—</span>
+          <span class="rate num" id="pRate">—</span>
+        </div>
+      </div>
+      <div class="seglist" id="variants" role="radiogroup" aria-label="Pattern variant"></div>
+      <div class="divider"></div>
+      <p class="copy" id="pCopy"></p>
+      <ul class="form" id="pForm"></ul>
+      <p class="evidence" id="pEvidence"></p>
+      <div class="record">
+        <span class="rv num" id="pRecord">0</span>
+        <span class="rl" id="pRecordLabel">best unbroken run</span>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ══ DOCK ══ -->
+  <footer class="dock">
+    <div class="timeline" id="timeline" aria-hidden="true"></div>
+    <div class="transport">
+      <button class="btn" id="btnStart">
+        <svg id="startIcon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        <span id="startLabel">Start</span>
+      </button>
+      <button class="btn ghost" id="btnReset" title="Reset session (R)">Reset</button>
+      <button class="btn ghost" id="btnExitFocus" title="Leave focus mode (F or Esc)">Exit focus</button>
+      <div class="target">
+        <span class="micro" id="targetLabel">Target 5:00</span>
+        <span class="bar"><i id="targetFill"></i></span>
+      </div>
+      <div class="hints"><b>Space</b> start · <b>1–4</b> protocol · <b>R</b> reset · <b>F</b> focus · <b>S</b> cues</div>
     </div>
-  </main>
-
-  <footer>
-    <p class="description" id="description">
-      Gold-standard baseline rhythm that synchronizes HRV with blood pressure oscillations (Mayer waves) to maximize calm focus at your desk.
-    </p>
   </footer>
+</div>
 
-  <button class="fullscreen-btn" onclick="toggleFullScreen()">Fullscreen ⛶</button>
+<noscript>Breath Sync needs JavaScript to run the pacer.</noscript>
 
-  <script>
-    const modes = {
-      resonance: {
-        desc: 'Gold-standard baseline rhythm that synchronizes HRV with blood pressure oscillations (Mayer waves) to maximize calm focus at your desk.',
-        minScale: 0.5,
-        maxScale: 0.9,
-        steps: [
-          { text: 'Inhale', duration: 5.5, startScale: 0.5, endScale: 0.9, type: 'inhale' },
-          { text: 'Exhale', duration: 5.5, startScale: 0.9, endScale: 0.5, type: 'exhale' }
-        ]
-      },
-      live: {
-        desc: 'No-hold ratio keeps aim steady and drops heart rate without muscle tension during active play.',
-        minScale: 0.5,
-        maxScale: 0.9,
-        steps: [
-          { text: 'Inhale', duration: 4.0, startScale: 0.5, endScale: 0.9, type: 'inhale' },
-          { text: 'Exhale', duration: 5.0, startScale: 0.9, endScale: 0.5, type: 'exhale' }
-        ]
-      },
-      box: {
-        desc: 'Symmetrical breathing to eliminate pre-game jitters and establish baseline focus.',
-        minScale: 0.5,
-        maxScale: 0.9,
-        steps: [
-          { text: 'Inhale', duration: 4.0, startScale: 0.5, endScale: 0.9, type: 'inhale' },
-          { text: 'Hold (Full)', duration: 4.0, startScale: 0.9, endScale: 0.9, type: 'hold' },
-          { text: 'Exhale', duration: 4.0, startScale: 0.9, endScale: 0.5, type: 'exhale' },
-          { text: 'Hold (Empty)', duration: 4.0, startScale: 0.5, endScale: 0.5, type: 'hold' }
-        ]
-      },
-      sigh: {
-        desc: 'Double-inhale offloads carbon dioxide fast to instantly dump adrenaline between rounds.',
-        minScale: 0.5,
-        maxScale: 0.95,
-        steps: [
-          { text: 'Inhale 1', duration: 3.0, startScale: 0.5, endScale: 0.8, type: 'inhale' },
-          { text: 'Inhale 2 (Top Up!)', duration: 1.0, startScale: 0.8, endScale: 0.95, type: 'topup' },
-          { text: 'Exhale (Sigh)', duration: 6.0, startScale: 0.95, endScale: 0.5, type: 'exhale' }
-        ]
+<script>
+"use strict";
+(function(){
+
+/* ════════════════════════════════════════════════════════════
+   1. PROTOCOLS
+   Four scenarios, one gold-standard default each, two vetted
+   alternates. Rates are computed from the phase durations, so
+   the numbers on screen can never drift from the pacing.
+   ════════════════════════════════════════════════════════════ */
+
+var NOSE = "in through the nose";
+var LIPS = "out through pursed lips";
+var MOUTH = "out through the mouth";
+
+var PROTOCOLS = [
+  {
+    id:"relax", name:"Full Relaxation", tag:"Down-regulate",
+    accent:"#a855f7", rgb:"168,85,247",
+    targetMin:5,
+    use:"Winding down, pre-sleep, after a stressful stretch.",
+    form:["Silent airflow — if you can hear it, ease off.",
+          "Belly moves first, chest second.",
+          "Jaw, tongue and shoulders loose on the exhale."],
+    copy:"<b>Make the exhale twice the inhale.</b> Vagal braking happens on the out-breath — the longer it runs, the further heart rate falls and the higher RMSSD and HF-HRV climb. Keep the volume small and the airflow silent; effort defeats the point.",
+    evidence:"Extending exhalation relative to inhalation raises cardiac vagal tone at a fixed breath rate (Van Diest et al.; Laborde et al. 2024). 4-7-8 is the classic sleep-onset variant — smaller trials only, but consistent direction.",
+    variants:[
+      { id:"48", label:"4 : 8", note:"1:2 extended exhale · default", phases:[
+        {type:"inhale", label:"Inhale", sub:NOSE, dur:4, from:0, to:1},
+        {type:"exhale", label:"Exhale", sub:LIPS, dur:8, from:1, to:0}
+      ]},
+      { id:"46", label:"4 : 6", note:"gentler entry point", phases:[
+        {type:"inhale", label:"Inhale", sub:NOSE, dur:4, from:0, to:1},
+        {type:"exhale", label:"Exhale", sub:LIPS, dur:6, from:1, to:0}
+      ]},
+      { id:"478", label:"4-7-8", note:"Weil · sleep onset", phases:[
+        {type:"inhale", label:"Inhale", sub:NOSE, dur:4, from:0, to:1},
+        {type:"hold",   label:"Hold",   sub:"lungs full, jaw loose", dur:7, from:1, to:1},
+        {type:"exhale", label:"Exhale", sub:MOUTH, dur:8, from:1, to:0}
+      ]}
+    ]
+  },
+  {
+    id:"perform", name:"Optimal Performance", tag:"Resonance",
+    accent:"#22e4ff", rgb:"34,228,255",
+    targetMin:10,
+    use:"Before and during precision work. Sustainable for hours.",
+    form:["Nose only, in and out.",
+          "Small volume — this is slow, not deep.",
+          "Sit tall; let the exhale fall rather than push."],
+    copy:"<b>Breathe at your resonance frequency, ~5.5 per minute.</b> Here the heart-rate wave and the blood-pressure wave run 180° out of phase, baroreflex gain peaks and HRV hits its maximum. Nasal, low volume, no holds — steady hands, clear head.",
+    evidence:"5.5 br/min with an equal I:E ratio produces the largest HRV increase (Lin et al. 2014); individual resonance sits between 4.5 and 6.5 br/min (Lehrer & Gevirtz). Box breathing is included as the pre-event tactical option — good for arousal control, weaker evidence for focus itself.",
+    variants:[
+      { id:"55", label:"5.5 : 5.5", note:"resonance · default", phases:[
+        {type:"inhale", label:"Inhale", sub:NOSE, dur:5.5, from:0, to:1},
+        {type:"exhale", label:"Exhale", sub:"out through the nose", dur:5.5, from:1, to:0}
+      ]},
+      { id:"55b", label:"5 : 5", note:"coherent · 6 br/min", phases:[
+        {type:"inhale", label:"Inhale", sub:NOSE, dur:5, from:0, to:1},
+        {type:"exhale", label:"Exhale", sub:"out through the nose", dur:5, from:1, to:0}
+      ]},
+      { id:"box", label:"4-4-4-4", note:"tactical box · pre-event", phases:[
+        {type:"inhale", label:"Inhale", sub:NOSE, dur:4, from:0, to:1},
+        {type:"hold",   label:"Hold",   sub:"lungs full", dur:4, from:1, to:1},
+        {type:"exhale", label:"Exhale", sub:"out through the nose", dur:4, from:1, to:0},
+        {type:"hold",   label:"Hold",   sub:"lungs empty", dur:4, from:0, to:0}
+      ]}
+    ]
+  },
+  {
+    id:"meditate", name:"Meditation · Clear Mind", tag:"Even ratio",
+    accent:"#ff2e9a", rgb:"255,46,154",
+    targetMin:10,
+    use:"Sitting practice and attention training.",
+    form:["Nose only — the entrainment effect is nasal.",
+          "Same length in, same length out, no pause.",
+          "When you notice you have drifted, that is the rep."],
+    copy:"<b>Equal in, equal out, nose only.</b> The symmetry removes any decision from the breath, so attention has one unchanging object. Nasal inhalation entrains hippocampal and amygdalar rhythms — the reason nose-breathing meditation feels different from mouth-breathing.",
+    evidence:"Nasal respiration entrains limbic oscillations and modulates cognition on the inhale specifically (Zelano et al. 2016, J Neurosci). Even-ratio pacing near 5–6 br/min sits inside the resonance band, so the calming physiology comes free.",
+    variants:[
+      { id:"66", label:"6 : 6", note:"even · default", phases:[
+        {type:"inhale", label:"Inhale", sub:NOSE, dur:6, from:0, to:1},
+        {type:"exhale", label:"Exhale", sub:"out through the nose", dur:6, from:1, to:0}
+      ]},
+      { id:"44", label:"4 : 4", note:"entry · settle first", phases:[
+        {type:"inhale", label:"Inhale", sub:NOSE, dur:4, from:0, to:1},
+        {type:"exhale", label:"Exhale", sub:"out through the nose", dur:4, from:1, to:0}
+      ]},
+      { id:"88", label:"8 : 8", note:"deep · experienced", phases:[
+        {type:"inhale", label:"Inhale", sub:NOSE, dur:8, from:0, to:1},
+        {type:"exhale", label:"Exhale", sub:"out through the nose", dur:8, from:1, to:0}
+      ]}
+    ]
+  },
+  {
+    id:"reset", name:"Anxiety Reset", tag:"Cyclic sigh",
+    accent:"#ff9a3c", rgb:"255,154,60",
+    targetMin:5,
+    use:"An acute spike. Works within a handful of cycles.",
+    form:["Both inhales through the nose, the second short and sharp.",
+          "Exhale through the mouth, slow and complete.",
+          "Do not force the top-up — a sip, not a gulp."],
+    copy:"<b>Two inhales, one long exhale.</b> The second short inhale pops collapsed alveoli back open; the long exhale dumps CO₂ and drops arousal within a few cycles. Fastest reliable route down from a spike — five minutes is the tested dose.",
+    evidence:"Cyclic sighing beat box breathing, cyclic hyperventilation and mindfulness meditation on daily mood improvement and respiratory-rate reduction over 28 days at 5 min/day (Balban et al. 2023, Cell Reports Medicine).",
+    variants:[
+      { id:"sigh", label:"2+1 : 6", note:"cyclic sigh · default", phases:[
+        {type:"inhale", label:"Inhale", sub:NOSE, dur:2, from:0, to:.72},
+        {type:"topup",  label:"Top up", sub:"short sharp second sip", dur:1, from:.72, to:1},
+        {type:"exhale", label:"Let it go", sub:MOUTH, dur:6, from:1, to:0}
+      ]},
+      { id:"sigh8", label:"2+1 : 8", note:"deep sigh · heavier load", phases:[
+        {type:"inhale", label:"Inhale", sub:NOSE, dur:2, from:0, to:.72},
+        {type:"topup",  label:"Top up", sub:"short sharp second sip", dur:1, from:.72, to:1},
+        {type:"exhale", label:"Let it go", sub:MOUTH, dur:8, from:1, to:0}
+      ]},
+      { id:"sighq", label:"1.5+1 : 5", note:"rapid · acute spike", phases:[
+        {type:"inhale", label:"Inhale", sub:NOSE, dur:1.5, from:0, to:.72},
+        {type:"topup",  label:"Top up", sub:"short sharp second sip", dur:1, from:.72, to:1},
+        {type:"exhale", label:"Let it go", sub:MOUTH, dur:5, from:1, to:0}
+      ]}
+    ]
+  }
+];
+
+/* ════════════════════════════════════════════════════════════
+   2. PALETTE + SPRITES
+   Glow is pre-rendered once per base colour, then two sprites
+   are additively cross-faded to reach any hue in between.
+   That removes every shadowBlur from the frame loop.
+   ════════════════════════════════════════════════════════════ */
+
+var C = {
+  cyan:[34,228,255],
+  magenta:[255,46,154],
+  violet:[168,85,247],
+  amber:[255,154,60],
+  white:[255,238,250],
+  deep:[124,58,237]
+};
+
+function makeSprite(rgb, kind){
+  var S = 256, c = document.createElement("canvas");
+  c.width = c.height = S;
+  var g = c.getContext("2d");
+  var grd = g.createRadialGradient(S/2,S/2,0,S/2,S/2,S/2);
+  var r=rgb[0], gg=rgb[1], b=rgb[2];
+  function s(p,a){ grd.addColorStop(p,"rgba("+r+","+gg+","+b+","+a+")"); }
+  if(kind === "halo"){
+    s(0,.95); s(.10,.62); s(.26,.28); s(.48,.09); s(.75,.015); s(1,0);
+  } else if(kind === "ring"){
+    // luminous shell: dark centre, bright rim — text stays readable inside
+    s(0,0); s(.42,.05); s(.66,.22); s(.84,.62); s(.94,.30); s(1,0);
+  } else if(kind === "dot"){
+    s(0,1); s(.35,.75); s(.7,.16); s(1,0);
+  } else { // core
+    s(0,1); s(.28,.45); s(.6,.07); s(1,0);
+  }
+  g.fillStyle = grd;
+  g.fillRect(0,0,S,S);
+  return c;
+}
+
+var SPR = {};
+(function buildSprites(){
+  var kinds = ["halo","ring","dot","core"];
+  for(var k in C){
+    SPR[k] = {};
+    for(var i=0;i<kinds.length;i++) SPR[k][kinds[i]] = makeSprite(C[k], kinds[i]);
+  }
+})();
+
+function lerp(a,b,t){ return a + (b-a)*t; }
+function mix(a,b,t){
+  return [Math.round(lerp(a[0],b[0],t)), Math.round(lerp(a[1],b[1],t)), Math.round(lerp(a[2],b[2],t))];
+}
+function rgba(c,a){ return "rgba("+c[0]+","+c[1]+","+c[2]+","+a+")"; }
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function easeBreath(t){ return (1 - Math.cos(clamp(t,0,1)*Math.PI))/2; }
+function easeOut(t){ return 1 - Math.pow(1-clamp(t,0,1),3); }
+
+/* ════════════════════════════════════════════════════════════
+   3. CANVAS + ADAPTIVE QUALITY
+   ════════════════════════════════════════════════════════════ */
+
+var cv = document.getElementById("stage");
+var ctx = cv.getContext("2d", {alpha:false, desynchronized:true});
+
+var reduceMotion = false;
+try{ reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches; }catch(e){}
+
+var TIERS = [
+  {name:"LITE", scaleCap:1.00, particles:0,  sparks:0,   drift:false, curveStep:14},
+  {name:"MED",  scaleCap:1.35, particles:38, sparks:60,  drift:true,  curveStep:9},
+  {name:"HIGH", scaleCap:2.00, particles:92, sparks:150, drift:true,  curveStep:6}
+];
+var qualityMode = "auto";        // auto | 0 | 1 | 2
+var tier = reduceMotion ? 0 : 2;
+var tierLocked = false;
+
+var view = {w:0,h:0,scale:1};
+var bg = null, bgPad = 90, bgPadPx = 90;
+var stageRect = {x:0,y:0,w:0,h:0};
+var geo = {cx:0,cy:0,r:100,waveX:0,waveY:0,waveW:0,waveH:0};
+var waveGrad = null;
+
+function makeBackground(w,h){
+  var c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(w));
+  c.height = Math.max(1, Math.round(h));
+  var g = c.getContext("2d");
+
+  g.fillStyle = "#05030f";
+  g.fillRect(0,0,c.width,c.height);
+
+  // nebula — a handful of big additive glows, painted once
+  g.globalCompositeOperation = "lighter";
+  var blobs = [
+    {k:"violet",  x:.20, y:.18, r:.62, a:.20},
+    {k:"magenta", x:.84, y:.30, r:.52, a:.15},
+    {k:"cyan",    x:.62, y:.88, r:.58, a:.13},
+    {k:"violet",  x:.08, y:.86, r:.44, a:.12},
+    {k:"amber",   x:.93, y:.80, r:.24, a:.09},
+    {k:"cyan",    x:.34, y:.52, r:.34, a:.06}
+  ];
+  var base = Math.max(c.width, c.height);
+  for(var i=0;i<blobs.length;i++){
+    var b = blobs[i], rr = base*b.r;
+    g.globalAlpha = b.a;
+    g.drawImage(SPR[b.k].halo, b.x*c.width - rr, b.y*c.height - rr, rr*2, rr*2);
+  }
+
+  // starfield
+  g.globalAlpha = 1;
+  var stars = Math.round((c.width*c.height)/9000);
+  stars = Math.min(stars, 420);
+  var pal = ["255,255,255","34,228,255","255,46,154","168,85,247"];
+  for(var s=0;s<stars;s++){
+    var x = Math.random()*c.width, y = Math.random()*c.height;
+    var sz = Math.random()*1.1 + .35;
+    var a = Math.random()*.42 + .08;
+    g.fillStyle = "rgba("+pal[(Math.random()*pal.length)|0]+","+a.toFixed(3)+")";
+    g.beginPath(); g.arc(x,y,sz,0,6.2832); g.fill();
+  }
+
+  // vignette
+  g.globalCompositeOperation = "source-over";
+  var vg = g.createRadialGradient(c.width/2,c.height/2, Math.min(c.width,c.height)*.18,
+                                  c.width/2,c.height/2, Math.max(c.width,c.height)*.72);
+  vg.addColorStop(0,"rgba(5,3,15,0)");
+  vg.addColorStop(.62,"rgba(5,3,15,.42)");
+  vg.addColorStop(1,"rgba(3,1,9,.9)");
+  g.fillStyle = vg;
+  g.fillRect(0,0,c.width,c.height);
+
+  return c;
+}
+
+function layout(){
+  var w = window.innerWidth, h = window.innerHeight;
+  var dpr = window.devicePixelRatio || 1;
+  var scale = Math.min(dpr, TIERS[tier].scaleCap);
+  view.w = w; view.h = h; view.scale = scale;
+
+  cv.width = Math.max(1, Math.round(w*scale));
+  cv.height = Math.max(1, Math.round(h*scale));
+  cv.style.width = w+"px";
+  cv.style.height = h+"px";
+
+  var z = document.getElementById("stagezone").getBoundingClientRect();
+  stageRect = {x:z.left, y:z.top, w:z.width, h:z.height};
+
+  var waveH = clamp(stageRect.h*0.17, 46, 104);
+  var top = stageRect.y + 22;
+  var availH = Math.max(90, (stageRect.y + stageRect.h - waveH - 14) - top);
+
+  geo.r = clamp(Math.min(stageRect.w*0.30, availH*0.33), 62, 250);
+  geo.cx = stageRect.x + stageRect.w/2;
+  geo.cy = top + availH/2;
+  geo.waveW = Math.min(stageRect.w*0.92, 720);
+  geo.waveX = stageRect.x + (stageRect.w - geo.waveW)/2;
+  geo.waveH = waveH;
+  geo.waveY = stageRect.y + stageRect.h - waveH - 4;
+
+  waveGrad = ctx.createLinearGradient(0, geo.waveY, 0, geo.waveY + geo.waveH);
+  waveGrad.addColorStop(0, "rgba(255,255,255,.14)");
+  waveGrad.addColorStop(1, "rgba(255,255,255,0)");
+
+  bgPadPx = Math.round(bgPad*scale);
+  bg = makeBackground(cv.width + bgPadPx*2, cv.height + bgPadPx*2);
+}
+
+/* ════════════════════════════════════════════════════════════
+   4. SESSION STATE
+   ════════════════════════════════════════════════════════════ */
+
+var S = {
+  pi:0, vi:0,                 // protocol index, variant index
+  phase:0, pt:0,              // phase index, elapsed in phase
+  mode:"idle",                // idle | prep | run | paused
+  prep:0,
+  elapsed:0,
+  total:0, run:0, best:0,
+  flash:0, cycleFlash:0,
+  sound:false
+};
+
+var BEST_KEY = "breathsync.best.v1";
+var bestMap = {};
+try{ bestMap = JSON.parse(localStorage.getItem(BEST_KEY) || "{}") || {}; }catch(e){ bestMap = {}; }
+function saveBest(){ try{ localStorage.setItem(BEST_KEY, JSON.stringify(bestMap)); }catch(e){} }
+
+function proto(){ return PROTOCOLS[S.pi]; }
+function variant(){ return proto().variants[S.vi]; }
+function phases(){ return variant().phases; }
+function cur(){ return phases()[S.phase]; }
+function cycleLen(){
+  var p = phases(), t = 0;
+  for(var i=0;i<p.length;i++) t += p[i].dur;
+  return t;
+}
+function bestKey(){ return proto().id + ":" + variant().id; }
+
+/* ════════════════════════════════════════════════════════════
+   5. AUDIO (created lazily, on gesture)
+   ════════════════════════════════════════════════════════════ */
+
+var actx = null;
+function audio(){
+  if(actx) return actx;
+  try{
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if(AC) actx = new AC();
+  }catch(e){ actx = null; }
+  return actx;
+}
+function tone(freq, dur, vol){
+  if(!S.sound) return;
+  var a = audio(); if(!a) return;
+  if(a.state === "suspended") a.resume();
+  var t = a.currentTime;
+  var o = a.createOscillator(), g = a.createGain();
+  o.type = "sine"; o.frequency.setValueAtTime(freq, t);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(a.destination);
+  o.start(t); o.stop(t + dur + 0.03);
+}
+var CUE = {inhale:432, topup:648, exhale:324, hold:540};
+function cuePhase(p){
+  tone(CUE[p.type] || 432, p.type === "topup" ? 0.22 : 0.4, 0.09);
+  if(navigator.vibrate && S.sound){ try{ navigator.vibrate(p.type === "topup" ? 22 : 12); }catch(e){} }
+}
+
+/* ════════════════════════════════════════════════════════════
+   6. DOM WIRING
+   ════════════════════════════════════════════════════════════ */
+
+var el = {
+  shell:document.getElementById("shell"),
+  rail:document.getElementById("rail"),
+  chip:document.getElementById("chip"),
+  panel:document.getElementById("panel"),
+  pName:document.getElementById("pName"),
+  pPattern:document.getElementById("pPattern"),
+  pRate:document.getElementById("pRate"),
+  pCopy:document.getElementById("pCopy"),
+  pForm:document.getElementById("pForm"),
+  pEvidence:document.getElementById("pEvidence"),
+  pRecord:document.getElementById("pRecord"),
+  pRecordLabel:document.getElementById("pRecordLabel"),
+  variants:document.getElementById("variants"),
+  timeline:document.getElementById("timeline"),
+  hudTime:document.getElementById("hudTime"),
+  hudTotal:document.getElementById("hudTotal"),
+  hudRun:document.getElementById("hudRun"),
+  hudBest:document.getElementById("hudBest"),
+  bestStat:document.getElementById("bestStat"),
+  btnStart:document.getElementById("btnStart"),
+  startLabel:document.getElementById("startLabel"),
+  startIcon:document.getElementById("startIcon"),
+  btnReset:document.getElementById("btnReset"),
+  btnSound:document.getElementById("btnSound"),
+  btnQuality:document.getElementById("btnQuality"),
+  btnFocus:document.getElementById("btnFocus"),
+  btnFull:document.getElementById("btnFull"),
+  targetLabel:document.getElementById("targetLabel"),
+  targetFill:document.getElementById("targetFill")
+};
+
+var PLAY_PATH = "M8 5v14l11-7z";
+var PAUSE_PATH = "M7 5h3.5v14H7zM13.5 5H17v14h-3.5z";
+
+// mode rail
+(function buildRail(){
+  var html = "";
+  for(var i=0;i<PROTOCOLS.length;i++){
+    var p = PROTOCOLS[i];
+    var d = p.variants[0];
+    html += '<button class="mode" role="radio" aria-checked="false" data-i="'+i+'"'+
+            ' style="--mc:'+p.accent+';--mcr:'+p.rgb+'">'+
+            '<kbd>'+(i+1)+'</kbd>'+
+            '<span class="t">'+p.tag+'</span>'+
+            '<span class="n">'+p.name+'</span>'+
+            '<span class="p">'+d.label+' &nbsp;·&nbsp; '+rateOf(d).toFixed(1)+' br/min</span>'+
+            '<span class="d">'+p.use+'</span>'+
+            '</button>';
+  }
+  el.rail.innerHTML = html;
+  el.rail.addEventListener("click", function(e){
+    var b = e.target.closest(".mode");
+    if(b) selectProtocol(+b.dataset.i);
+  });
+})();
+
+function rateOf(v){
+  var t = 0;
+  for(var i=0;i<v.phases.length;i++) t += v.phases[i].dur;
+  return 60/t;
+}
+
+function fmtDur(d){ return (d % 1 === 0) ? String(d) : d.toFixed(1); }
+
+function phaseRGBName(p){
+  if(p.type === "inhale") return "34,228,255";
+  if(p.type === "topup")  return "255,238,250";
+  if(p.type === "exhale") return "255,46,154";
+  return p.from > 0.5 ? "255,154,60" : "168,85,247";
+}
+
+function buildTimeline(){
+  var ps = phases(), html = "";
+  for(var i=0;i<ps.length;i++){
+    var p = ps[i];
+    html += '<div class="seg" style="flex:'+p.dur+';--sc:'+phaseRGBName(p)+'">'+
+            '<i></i><span>'+p.label+' <em>'+fmtDur(p.dur)+'s</em></span></div>';
+  }
+  el.timeline.innerHTML = html;
+  segEls = el.timeline.querySelectorAll(".seg");
+  segFills = el.timeline.querySelectorAll(".seg i");
+  syncSegments();
+}
+var segEls = [], segFills = [];
+
+function syncSegments(){
+  for(var i=0;i<segEls.length;i++){
+    segEls[i].classList.toggle("on", i === S.phase);
+    if(i !== S.phase) segFills[i].style.transform = "scaleX(" + (i < S.phase ? 1 : 0) + ")";
+  }
+}
+
+function buildVariants(){
+  var p = proto(), html = "";
+  for(var i=0;i<p.variants.length;i++){
+    var v = p.variants[i];
+    html += '<button class="variant" role="radio" aria-checked="'+(i===S.vi)+'" data-i="'+i+'">'+
+            '<span class="vp">'+v.label+'</span><span class="vn">'+v.note+'</span></button>';
+  }
+  el.variants.innerHTML = html;
+}
+el.variants.addEventListener("click", function(e){
+  var b = e.target.closest(".variant");
+  if(b) selectVariant(+b.dataset.i);
+});
+
+function paintPanel(){
+  var p = proto(), v = variant();
+  el.pName.textContent = p.name;
+  el.pPattern.textContent = v.label;
+  el.pRate.textContent = rateOf(v).toFixed(1) + " br/min · " + fmtDur(cycleLen()) + "s cycle";
+  el.pCopy.innerHTML = p.copy;
+  var fh = "";
+  for(var f=0;f<p.form.length;f++) fh += "<li>" + p.form[f] + "</li>";
+  el.pForm.innerHTML = fh;
+  el.pEvidence.textContent = p.evidence;
+  el.targetLabel.textContent = "Target " + p.targetMin + ":00";
+  document.documentElement.style.setProperty("--accent", p.accent);
+  document.documentElement.style.setProperty("--accent-rgb", p.rgb);
+  var ms = el.rail.querySelectorAll(".mode");
+  for(var i=0;i<ms.length;i++) ms[i].setAttribute("aria-checked", String(i === S.pi));
+  var vs = el.variants.querySelectorAll(".variant");
+  for(var j=0;j<vs.length;j++) vs[j].setAttribute("aria-checked", String(j === S.vi));
+  S.best = bestMap[bestKey()] || 0;
+  el.hudBest.textContent = S.best;
+  paintRecord();
+}
+
+function paintRecord(){
+  el.pRecord.textContent = S.best;
+  el.pRecordLabel.textContent = "best unbroken run · " + variant().label;
+}
+
+function bankRun(){
+  if(S.run > (bestMap[bestKey()] || 0)){
+    bestMap[bestKey()] = S.run;
+    saveBest();
+  }
+  S.best = bestMap[bestKey()] || 0;
+  el.hudBest.textContent = S.best;
+  paintRecord();
+  if(S.run > 0){
+    el.bestStat.classList.add("flash");
+    setTimeout(function(){ el.bestStat.classList.remove("flash"); }, 900);
+  }
+  S.run = 0;
+  el.hudRun.textContent = "0";
+}
+
+function selectProtocol(i){
+  if(i === S.pi) return;
+  bankRun();
+  S.pi = i; S.vi = 0;
+  restartPattern(true);
+  buildVariants(); buildTimeline(); paintPanel();
+}
+function selectVariant(i){
+  if(i === S.vi) return;
+  bankRun();
+  S.vi = i;
+  restartPattern(true);
+  buildTimeline(); paintPanel();
+}
+function restartPattern(toIdle){
+  S.phase = 0; S.pt = 0; S.flash = 1;
+  curve = buildCurve();
+  if(toIdle){
+    S.mode = "idle";
+    S.elapsed = 0; S.total = 0; lastSec = -1;
+    el.hudTotal.textContent = "0";
+    el.hudTime.textContent = "0:00";
+    el.targetFill.style.width = "0%";
+  }
+  paintTransport();
+  syncSegments();
+}
+
+function paintTransport(){
+  var running = (S.mode === "run" || S.mode === "prep");
+  el.startLabel.textContent = running ? "Pause" : (S.mode === "paused" ? "Resume" : "Start");
+  el.startIcon.querySelector("path").setAttribute("d", running ? PAUSE_PATH : PLAY_PATH);
+  el.chip.classList.toggle("live", running);
+  if(S.mode === "idle") el.chip.textContent = "Preview — press start";
+  else if(S.mode === "prep") el.chip.textContent = "Get ready";
+  else if(S.mode === "paused") el.chip.textContent = "Paused — run banked";
+  else el.chip.textContent = proto().tag + " · " + variant().label;
+}
+
+/* ---- transport actions ---- */
+function start(){
+  if(S.mode === "run" || S.mode === "prep"){ pause(); return; }
+  audio();
+  if(S.mode === "paused"){ S.mode = "run"; paintTransport(); return; }
+  S.mode = "prep"; S.prep = 3;
+  S.phase = 0; S.pt = 0; S.flash = 1;
+  syncSegments(); paintTransport();
+}
+function pause(){
+  if(S.mode !== "run" && S.mode !== "prep") return;
+  S.mode = "paused";
+  bankRun();
+  paintTransport();
+}
+function resetAll(){
+  bankRun();
+  S.mode = "idle"; S.elapsed = 0; S.total = 0; S.phase = 0; S.pt = 0; S.flash = 1;
+  el.hudTotal.textContent = "0"; el.hudTime.textContent = "0:00";
+  el.targetFill.style.width = "0%";
+  syncSegments(); paintTransport();
+}
+
+el.btnStart.addEventListener("click", start);
+el.btnReset.addEventListener("click", resetAll);
+el.btnSound.addEventListener("click", function(){
+  S.sound = !S.sound;
+  el.btnSound.setAttribute("aria-pressed", String(S.sound));
+  if(S.sound){ audio(); tone(432, .25, .07); }
+});
+function setFocusMode(on){
+  el.shell.classList.toggle("focus", on);
+  el.btnFocus.setAttribute("aria-pressed", String(on));
+  layout();
+}
+el.btnFocus.addEventListener("click", function(){
+  setFocusMode(!el.shell.classList.contains("focus"));
+});
+document.getElementById("btnExitFocus").addEventListener("click", function(){ setFocusMode(false); });
+el.btnFull.addEventListener("click", function(){
+  if(!document.fullscreenElement){
+    if(document.documentElement.requestFullscreen)
+      document.documentElement.requestFullscreen().catch(function(){});
+  } else if(document.exitFullscreen){ document.exitFullscreen(); }
+});
+el.btnQuality.addEventListener("click", function(){
+  if(qualityMode === "auto"){ qualityMode = 2; }
+  else if(qualityMode === 2){ qualityMode = 1; }
+  else if(qualityMode === 1){ qualityMode = 0; }
+  else { qualityMode = "auto"; }
+  tierLocked = (qualityMode !== "auto");
+  if(tierLocked) tier = qualityMode;
+  el.btnQuality.textContent = tierLocked ? TIERS[tier].name : "AUTO";
+  rebuildParticles();
+  layout();
+});
+
+document.addEventListener("keydown", function(e){
+  if(e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  var k = e.key.toLowerCase();
+  if(k === " " || e.code === "Space"){ e.preventDefault(); start(); }
+  else if(k === "r"){ resetAll(); }
+  else if(k === "f"){ setFocusMode(!el.shell.classList.contains("focus")); }
+  else if(k === "escape"){ if(el.shell.classList.contains("focus")) setFocusMode(false); }
+  else if(k === "s"){ el.btnSound.click(); }
+  else if(k >= "1" && k <= "4"){ selectProtocol(+k - 1); }
+});
+
+document.addEventListener("visibilitychange", function(){
+  if(document.hidden && S.mode === "run") pause();
+  last = 0;
+});
+
+/* ════════════════════════════════════════════════════════════
+   7. PARTICLES
+   ════════════════════════════════════════════════════════════ */
+
+var orbit = [], sparks = [];
+var ORBIT_COLORS = ["cyan","magenta","violet","amber"];
+
+function rebuildParticles(){
+  var n = TIERS[tier].particles;
+  orbit.length = 0;
+  for(var i=0;i<n;i++){
+    orbit.push({
+      a: Math.random()*6.2832,
+      sp: (Math.random()*.16 + .04) * (Math.random() < .5 ? -1 : 1),
+      rr: Math.random()*Math.random(),
+      sz: Math.random()*2.6 + 1.1,
+      c: ORBIT_COLORS[(Math.random()*(i%9===0?4:3))|0],
+      ph: Math.random()*6.2832,
+      wob: Math.random()*.5 + .2
+    });
+  }
+  if(sparks.length > TIERS[tier].sparks) sparks.length = TIERS[tier].sparks;
+}
+
+function burst(n, speed, colorKey){
+  var cap = TIERS[tier].sparks;
+  if(cap === 0) return;
+  for(var i=0;i<n && sparks.length < cap;i++){
+    var a = Math.random()*6.2832;
+    var v = speed*(0.45 + Math.random()*0.75);
+    sparks.push({
+      x: geo.cx + Math.cos(a)*geo.r*.9,
+      y: geo.cy + Math.sin(a)*geo.r*.9,
+      vx: Math.cos(a)*v, vy: Math.sin(a)*v - 6,
+      life: 1, dk: .5 + Math.random()*.7,
+      sz: Math.random()*2.6 + 1.4,
+      c: colorKey
+    });
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   8. BREATH CURVE (analytic, one cycle)
+   ════════════════════════════════════════════════════════════ */
+
+var curve = [];
+function buildCurve(){
+  var ps = phases(), total = cycleLen(), out = [], acc = 0;
+  var step = TIERS[tier].curveStep;
+  for(var i=0;i<ps.length;i++){
+    var p = ps[i];
+    var n = Math.max(4, Math.round(p.dur*step));
+    for(var j=0;j<=n;j++){
+      var t = j/n;
+      var v = (p.to === p.from) ? p.from : p.from + (p.to - p.from)*easeBreath(t);
+      out.push([(acc + p.dur*t)/total, v]);
+    }
+    acc += p.dur;
+  }
+  return out;
+}
+
+function cycleProgress(){
+  var ps = phases(), acc = 0;
+  for(var i=0;i<S.phase;i++) acc += ps[i].dur;
+  return (acc + S.pt)/cycleLen();
+}
+
+function volume(){
+  var p = cur();
+  if(p.to === p.from) return p.from;
+  return p.from + (p.to - p.from)*easeBreath(S.pt/p.dur);
+}
+
+/* ════════════════════════════════════════════════════════════
+   9. ADVANCE
+   ════════════════════════════════════════════════════════════ */
+
+function advance(dt){
+  if(S.mode === "prep"){
+    S.prep -= dt;
+    if(S.prep <= 0){
+      S.mode = "run"; S.phase = 0; S.pt = 0; S.flash = 1;
+      syncSegments(); paintTransport(); cuePhase(cur());
+    }
+    return;
+  }
+  var counting = (S.mode === "run");
+  if(counting) S.elapsed += dt;
+
+  S.pt += dt;
+  var guard = 0;
+  while(S.pt >= cur().dur && guard++ < 40){
+    S.pt -= cur().dur;
+    S.phase++;
+    if(S.phase >= phases().length){
+      S.phase = 0;
+      if(counting){
+        S.total++; S.run++; S.cycleFlash = 1;
+        el.hudTotal.textContent = S.total;
+        el.hudRun.textContent = S.run;
+        if(S.run > S.best){
+          S.best = S.run; bestMap[bestKey()] = S.run; saveBest();
+          el.hudBest.textContent = S.best;
+          paintRecord();
+        }
+        if(S.run % 10 === 0){ tone(648,.5,.07); setTimeout(function(){ tone(864,.5,.06); }, 150); }
+        burst(TIERS[tier].sparks > 0 ? 18 : 0, 70, "violet");
       }
-    };
-
-    // Color Spectrum Anchors
-    const COLOR_CYAN   = { r: 6,   g: 182, b: 212, hex: '#06b6d4', glow: 'rgba(6, 182, 212, 0.6)' };
-    const COLOR_FLASH  = { r: 56,  g: 189, b: 248, hex: '#38bdf8', glow: 'rgba(56, 189, 248, 0.95)' };
-    const COLOR_PURPLE = { r: 168, g: 85,  b: 247, hex: '#a855f7', glow: 'rgba(168, 85, 247, 0.6)' };
-    const COLOR_AMBER  = { r: 245, g: 158, b: 11,  hex: '#f59e0b', glow: 'rgba(245, 158, 11, 0.6)' };
-
-    let currentModeKey = 'resonance';
-    let stepIndex = 0;
-    let stepStartTime = performance.now();
-    let particles = [];
-    let lastStepType = null;
-
-    const canvas = document.getElementById('stage');
-    const ctx = canvas.getContext('2d');
-    const instructionEl = document.getElementById('instruction');
-    const timerEl = document.getElementById('timer');
-    const descriptionEl = document.getElementById('description');
-    const modeButtons = document.querySelectorAll('.mode-btn');
-    const presetButtons = document.querySelectorAll('.preset-btn');
-    const presetBar = document.getElementById('presetBar');
-
-    function breathEase(t) {
-      return (1 - Math.cos(t * Math.PI)) / 2;
     }
+    S.flash = 1;
+    syncSegments();
+    if(counting) cuePhase(cur());
+    if(cur().type === "topup") burst(24, 95, "white");
+  }
+}
 
-    function resizeCanvas() {
-      canvas.width = canvas.clientWidth;
-      canvas.height = canvas.clientHeight;
+/* ════════════════════════════════════════════════════════════
+   10. DRAW
+   ════════════════════════════════════════════════════════════ */
+
+function drawGlow(spr, x, y, r, a){
+  if(a <= 0.002 || r <= 0) return;
+  ctx.globalAlpha = a;
+  ctx.drawImage(spr, x-r, y-r, r*2, r*2);
+}
+
+function tracked(text, x, y, size, spacing, color, weight){
+  ctx.font = (weight||700) + " " + size.toFixed(1) + "px " + FF;
+  var chars = text.split("");
+  var w = 0, i;
+  for(i=0;i<chars.length;i++) w += ctx.measureText(chars[i]).width + spacing;
+  w -= spacing;
+  var px = x - w/2;
+  ctx.fillStyle = color;
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  for(i=0;i<chars.length;i++){
+    ctx.fillText(chars[i], px, y);
+    px += ctx.measureText(chars[i]).width + spacing;
+  }
+}
+var FF = 'ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif';
+
+function phaseColorPair(p){
+  if(p.type === "inhale") return [C.cyan, C.magenta];
+  if(p.type === "topup")  return [C.magenta, C.white];
+  if(p.type === "exhale") return [C.magenta, C.violet];
+  return p.from > 0.5 ? [C.amber, C.magenta] : [C.violet, C.deep];
+}
+function phaseSpriteKeys(p){
+  if(p.type === "inhale") return ["cyan","magenta"];
+  if(p.type === "topup")  return ["magenta","white"];
+  if(p.type === "exhale") return ["magenta","violet"];
+  return p.from > 0.5 ? ["amber","magenta"] : ["violet","deep"];
+}
+
+function draw(now, dt){
+  var W = view.w, H = view.h, sc = view.scale;
+
+  /* --- background blit (1:1, cheap) --- */
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  if(bg){
+    var ox = -bgPadPx, oy = -bgPadPx;
+    if(TIERS[tier].drift){
+      ox += Math.sin(now*0.045)*bgPadPx*0.5;
+      oy += Math.cos(now*0.031)*bgPadPx*0.5;
     }
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
+    ctx.drawImage(bg, Math.round(ox), Math.round(oy));
+  } else {
+    ctx.fillStyle = "#05030f";
+    ctx.fillRect(0,0,cv.width,cv.height);
+  }
+  ctx.setTransform(sc,0,0,sc,0,0);
 
-    function setMode(modeKey) {
-      currentModeKey = modeKey;
-      stepIndex = 0;
-      stepStartTime = performance.now();
-      particles = [];
-      lastStepType = null;
-      
-      modeButtons.forEach((btn, idx) => {
-        btn.classList.toggle('active', 
-          (modeKey === 'resonance' && idx === 0) ||
-          (modeKey === 'live' && idx === 1) ||
-          (modeKey === 'box' && idx === 2) ||
-          (modeKey === 'sigh' && idx === 3)
-        );
-      });
+  var p = cur();
+  var prog = clamp(S.pt/p.dur, 0, 1);
+  var vol = volume();
+  var pair = phaseColorPair(p);
+  var keys = phaseSpriteKeys(p);
+  var w;
+  if(p.to === p.from) w = 0.5 + 0.5*Math.sin(now*1.5);
+  else if(p.type === "topup") w = Math.pow(prog, 0.55);
+  else w = Math.pow(easeBreath(prog), p.type === "inhale" ? 1.75 : 1.25);
+  var col = mix(pair[0], pair[1], w);
 
-      presetBar.classList.toggle('visible', modeKey === 'resonance');
-      descriptionEl.textContent = modes[modeKey].desc;
+  var idle = (S.mode === "idle");
+  var dim = idle ? 0.55 : (S.mode === "paused" ? 0.4 : 1);
+
+  S.flash = Math.max(0, S.flash - dt*2.6);
+  S.cycleFlash = Math.max(0, S.cycleFlash - dt*1.4);
+  var fl = easeOut(S.flash);
+
+  var cx = geo.cx, cy = geo.cy, R = geo.r;
+  var r = R*(0.40 + 0.60*vol);
+  if(S.mode === "prep") r = R*0.40;
+
+  /* --- orbit particles (behind orb) --- */
+  ctx.globalCompositeOperation = "lighter";
+  if(orbit.length){
+    var pull = 1.34 - vol*0.30;
+    for(var i=0;i<orbit.length;i++){
+      var o = orbit[i];
+      o.a += o.sp*dt;
+      var rad = r*pull + R*(0.10 + o.rr*0.62) + Math.sin(now*o.wob + o.ph)*R*0.045;
+      var x = cx + Math.cos(o.a)*rad;
+      var y = cy + Math.sin(o.a)*rad*0.92;
+      var a = (0.16 + 0.30*(1-o.rr)) * dim * (0.7 + 0.3*Math.sin(now*1.7 + o.ph));
+      drawGlow(SPR[o.c].dot, x, y, o.sz*(1.8 + fl*1.2), a);
     }
+  }
 
-    function setResonancePreset(preset) {
-      stepIndex = 0;
-      stepStartTime = performance.now();
-      lastStepType = null;
+  /* --- orb: corona, halo, shell, core --- */
+  var boost = 1 + fl*0.35 + S.cycleFlash*0.18;
+  if(tier > 0) drawGlow(SPR[w < .5 ? keys[0] : keys[1]].halo, cx, cy, r*2.10, 0.17*dim*boost);
+  drawGlow(SPR[keys[0]].halo, cx, cy, r*1.45, 0.30*(1-w)*dim*boost);
+  drawGlow(SPR[keys[1]].halo, cx, cy, r*1.45, 0.30*w*dim*boost);
+  drawGlow(SPR[keys[0]].ring, cx, cy, r*1.12, 0.72*(1-w)*dim*boost);
+  drawGlow(SPR[keys[1]].ring, cx, cy, r*1.12, 0.72*w*dim*boost);
+  drawGlow(SPR[keys[0]].core, cx, cy, r*0.55, 0.10*(1-w)*dim);
+  drawGlow(SPR[keys[1]].core, cx, cy, r*0.55, 0.10*w*dim);
+  if(p.type === "topup") drawGlow(SPR.white.halo, cx, cy, r*1.9, 0.22*prog*dim);
 
-      presetButtons.forEach((btn, idx) => {
-        btn.classList.toggle('active', 
-          (preset === 'optimal' && idx === 0) ||
-          (preset === 'extended' && idx === 1) ||
-          (preset === 'balanced' && idx === 2)
-        );
-      });
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
 
-      if (preset === 'optimal') {
-        modes.resonance.steps = [
-          { text: 'Inhale', duration: 5.5, startScale: 0.5, endScale: 0.9, type: 'inhale' },
-          { text: 'Exhale', duration: 5.5, startScale: 0.9, endScale: 0.5, type: 'exhale' }
-        ];
-      } else if (preset === 'extended') {
-        modes.resonance.steps = [
-          { text: 'Inhale', duration: 4.0, startScale: 0.5, endScale: 0.9, type: 'inhale' },
-          { text: 'Exhale', duration: 6.0, startScale: 0.9, endScale: 0.5, type: 'exhale' }
-        ];
-      } else if (preset === 'balanced') {
-        modes.resonance.steps = [
-          { text: 'Inhale', duration: 5.0, startScale: 0.5, endScale: 0.9, type: 'inhale' },
-          { text: 'Exhale', duration: 5.0, startScale: 0.9, endScale: 0.5, type: 'exhale' }
-        ];
-      }
-    }
+  /* --- crisp shell rim --- */
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, 6.2832);
+  ctx.strokeStyle = rgba(col, (0.85 + fl*0.15)*dim);
+  ctx.lineWidth = 1.6 + fl*1.4;
+  ctx.stroke();
 
-    function drawRoundedRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.arc(cx, cy, r*1.055, 0, 6.2832);
+  ctx.strokeStyle = rgba(col, 0.18*dim);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  /* --- phase progress arc --- */
+  var aR = R*1.20;
+  ctx.beginPath();
+  ctx.arc(cx, cy, aR, 0, 6.2832);
+  ctx.strokeStyle = "rgba(255,255,255,.055)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, aR, -Math.PI/2, -Math.PI/2 + 6.2832*prog);
+  ctx.strokeStyle = rgba(col, 0.9*dim);
+  ctx.lineWidth = 2.4;
+  ctx.lineCap = "round";
+  ctx.stroke();
+  ctx.lineCap = "butt";
+
+  // arc head
+  var ha = -Math.PI/2 + 6.2832*prog;
+  ctx.globalCompositeOperation = "lighter";
+  drawGlow(SPR[keys[1]].dot, cx + Math.cos(ha)*aR, cy + Math.sin(ha)*aR, 7 + fl*5, 0.75*dim);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+
+  /* --- cycle ticks: one per second of the phase --- */
+  var secs = Math.round(p.dur);
+  if(secs > 1 && secs <= 12){
+    for(var t=0;t<secs;t++){
+      var frac = t/secs;
+      var ang = -Math.PI/2 + 6.2832*frac;
+      var on = frac <= prog;
+      var i0 = aR + 6, i1 = aR + (on ? 12 : 9);
       ctx.beginPath();
-      ctx.moveTo(x + radius, y);
-      ctx.lineTo(x + width - radius, y);
-      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-      ctx.lineTo(x + width, y + height - radius);
-      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-      ctx.lineTo(x + radius, y + height);
-      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-      ctx.lineTo(x, y + radius);
-      ctx.quadraticCurveTo(x, y, x + radius, y);
-      ctx.closePath();
-    }
-
-    function render(now) {
-      const mode = modes[currentModeKey];
-      let elapsed = (now - stepStartTime) / 1000;
-      let step = mode.steps[stepIndex];
-
-      while (elapsed >= step.duration) {
-        stepStartTime += step.duration * 1000;
-        stepIndex = (stepIndex + 1) % mode.steps.length;
-        step = mode.steps[stepIndex];
-        elapsed = (now - stepStartTime) / 1000;
-      }
-
-      instructionEl.textContent = step.text;
-      instructionEl.classList.toggle('accent', step.type === 'topup');
-      instructionEl.classList.toggle('hold', step.type === 'hold');
-      instructionEl.classList.toggle('cyan', step.type === 'inhale');
-      instructionEl.classList.toggle('purple', step.type === 'exhale');
-      
-      const secondsRemaining = (step.duration - elapsed).toFixed(1);
-      timerEl.textContent = secondsRemaining > 0 ? secondsRemaining : '0.0';
-
-      const progress = Math.min(Math.max(elapsed / step.duration, 0), 1);
-      const easedProgress = (step.type === 'hold') ? progress : breathEase(progress);
-      const currentScale = step.startScale + (step.endScale - step.startScale) * easedProgress;
-
-      // Assign explicit color targets per breath phase
-      let borderTheme;
-      if (step.type === 'topup') {
-        borderTheme = COLOR_FLASH;
-      } else if (step.type === 'inhale') {
-        borderTheme = COLOR_CYAN;
-      } else if (step.type === 'exhale') {
-        borderTheme = COLOR_PURPLE;
-      } else if (step.type === 'hold') {
-        borderTheme = COLOR_AMBER;
-      }
-
-      // Snappy Border Color Update: Snap color instantly on phase trigger
-      if (lastStepType !== step.type) {
-        document.documentElement.style.setProperty('--border-color', borderTheme.hex);
-        document.documentElement.style.setProperty('--border-glow', borderTheme.glow);
-        lastStepType = step.type;
-      }
-
-      let activeColor = borderTheme;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const centerX = canvas.width / 2;
-      const centerY = (canvas.height / 2) - 20;
-      const maxRadius = Math.min(canvas.width, canvas.height) * 0.35;
-      const radius = maxRadius * currentScale;
-
-      // -------------------------------------------------------------
-      // 1. VERTICAL VOLUME PACING BAR
-      // -------------------------------------------------------------
-      const barHeight = maxRadius * 2.3;
-      const barWidth = 40;
-      const mainBarX = centerX - maxRadius * 2.1 - barWidth;
-      const mainBarY = centerY - barHeight / 2;
-
-      const modeMin = mode.minScale;
-      const modeMax = mode.maxScale;
-      const fillPercent = Math.max(0, Math.min(1, (currentScale - modeMin) / (modeMax - modeMin)));
-      
-      const currentFillHeight = barHeight * fillPercent;
-      const fillY = mainBarY + barHeight - currentFillHeight;
-
-      // Volume Bar Track
-      ctx.save();
-      drawRoundedRect(ctx, mainBarX, mainBarY, barWidth, barHeight, 12);
-      ctx.fillStyle = 'rgba(16, 14, 23, 0.85)';
-      ctx.fill();
-      ctx.strokeStyle = step.type === 'hold' ? 'rgba(255, 255, 255, 0.2)' : borderTheme.hex;
-      ctx.lineWidth = step.type === 'topup' ? 4 : 2;
-      ctx.shadowColor = borderTheme.hex;
-      ctx.shadowBlur = step.type === 'topup' ? 22 : 12;
+      ctx.moveTo(cx + Math.cos(ang)*i0, cy + Math.sin(ang)*i0);
+      ctx.lineTo(cx + Math.cos(ang)*i1, cy + Math.sin(ang)*i1);
+      ctx.strokeStyle = on ? rgba(col, .55*dim) : "rgba(255,255,255,.10)";
+      ctx.lineWidth = 1.4;
       ctx.stroke();
-      ctx.restore();
+    }
+  }
 
-      // Volume Bar Fill
-      if (currentFillHeight > 0) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(mainBarX, fillY, barWidth, currentFillHeight);
-        ctx.clip();
-
-        drawRoundedRect(ctx, mainBarX, mainBarY, barWidth, barHeight, 12);
-        const barGrad = ctx.createLinearGradient(mainBarX, mainBarY + barHeight, mainBarX, mainBarY);
-        barGrad.addColorStop(0, `rgba(${activeColor.r}, ${activeColor.g}, ${activeColor.b}, 0.25)`);
-        barGrad.addColorStop(1, activeColor.hex);
-
-        ctx.fillStyle = barGrad;
-        ctx.shadowColor = activeColor.hex;
-        ctx.shadowBlur = step.type === 'topup' ? 26 : 16;
-        ctx.fill();
-        ctx.restore();
-
-        // Leading Edge Line
-        ctx.save();
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = '#ffffff';
-        ctx.shadowBlur = 10;
-        ctx.fillRect(mainBarX - 3, fillY - 2, barWidth + 6, 4);
-        ctx.restore();
-      }
-
-      // Live Readout Above Volume Bar
-      ctx.save();
-      ctx.fillStyle = activeColor.hex;
-      ctx.font = '800 12px -apple-system, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${Math.round(fillPercent * 100)}%`, mainBarX + barWidth / 2, mainBarY - 12);
-      ctx.restore();
-
-      // -------------------------------------------------------------
-      // 2. HORIZONTAL HOLD TIMER BAR
-      // -------------------------------------------------------------
-      if (step.type === 'hold') {
-        const holdBarWidth = maxRadius * 2.2;
-        const holdBarHeight = 22;
-        const holdBarX = centerX - holdBarWidth / 2;
-        const holdBarY = centerY - maxRadius - 50;
-
-        const holdRemainingPercent = 1 - progress;
-        const currentHoldFillWidth = holdBarWidth * holdRemainingPercent;
-        const holdFillX = centerX - currentHoldFillWidth / 2;
-
-        // Hold Track Backing
-        ctx.save();
-        drawRoundedRect(ctx, holdBarX, holdBarY, holdBarWidth, holdBarHeight, 10);
-        ctx.fillStyle = 'rgba(16, 14, 23, 0.85)';
-        ctx.fill();
-        ctx.strokeStyle = COLOR_AMBER.hex;
-        ctx.lineWidth = 2;
-        ctx.shadowColor = COLOR_AMBER.hex;
-        ctx.shadowBlur = 16;
-        ctx.stroke();
-        ctx.restore();
-
-        // Hold Track Fill
-        if (currentHoldFillWidth > 0) {
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(holdFillX, holdBarY, currentHoldFillWidth, holdBarHeight);
-          ctx.clip();
-
-          drawRoundedRect(ctx, holdBarX, holdBarY, holdBarWidth, holdBarHeight, 10);
-          const holdGrad = ctx.createLinearGradient(holdBarX, holdBarY, holdBarX + holdBarWidth, holdBarY);
-          holdGrad.addColorStop(0, COLOR_AMBER.hex);
-          holdGrad.addColorStop(0.5, 'rgba(245, 158, 11, 0.4)');
-          holdGrad.addColorStop(1, COLOR_AMBER.hex);
-
-          ctx.fillStyle = holdGrad;
-          ctx.shadowColor = COLOR_AMBER.hex;
-          ctx.shadowBlur = 18;
-          ctx.fill();
-          ctx.restore();
-        }
-
-        // Hold Header Label
-        ctx.save();
-        ctx.fillStyle = COLOR_AMBER.hex;
-        ctx.font = '800 11px -apple-system, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('PAUSE DURATION', centerX, holdBarY - 10);
-        ctx.restore();
-      }
-
-      // -------------------------------------------------------------
-      // 3. TILT RESET (SIGH) SPECIFIC NOTCH MARKER
-      // -------------------------------------------------------------
-      if (currentModeKey === 'sigh') {
-        const topUpThreshold = (0.8 - modeMin) / (modeMax - modeMin);
-        const notchY = mainBarY + barHeight - (barHeight * topUpThreshold);
-
-        ctx.save();
-        ctx.strokeStyle = step.type === 'topup' ? '#38bdf8' : 'rgba(255, 255, 255, 0.6)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(mainBarX - 8, notchY);
-        ctx.lineTo(mainBarX + barWidth + 8, notchY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        ctx.fillStyle = step.type === 'topup' ? '#38bdf8' : 'rgba(255, 255, 255, 0.5)';
-        ctx.font = '700 11px -apple-system, sans-serif';
-        ctx.textAlign = 'right';
-        ctx.fillText('TOP UP ➔', mainBarX - 12, notchY + 4);
-        ctx.restore();
-
-        if (step.type === 'topup' && Math.random() < 0.6) {
-          particles.push({
-            x: mainBarX + Math.random() * barWidth,
-            y: fillY,
-            vy: -Math.random() * 3 - 2,
-            size: Math.random() * 3 + 2,
-            alpha: 1.0
-          });
-        }
-      }
-
-      // Surge Particles
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.y += p.vy;
-        p.alpha -= 0.04;
-        if (p.alpha <= 0) {
-          particles.splice(i, 1);
-          continue;
-        }
-        ctx.save();
-        ctx.fillStyle = `rgba(56, 189, 248, ${p.alpha})`;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-
-      // -------------------------------------------------------------
-      // MAIN ORB & TRACKING RING
-      // -------------------------------------------------------------
+  /* --- streak ring: a tick per breath, 12 per lap --- */
+  if(S.run > 0){
+    var lap = Math.floor((S.run-1)/12);
+    var inLap = S.run - lap*12;
+    var sR = R*1.42;
+    for(var k=0;k<12;k++){
+      var a2 = -Math.PI/2 + 6.2832*(k/12);
+      var lit = k < inLap;
+      var l0 = sR, l1 = sR + (lit ? 8 : 4);
       ctx.beginPath();
-      ctx.arc(centerX, centerY, radius * 1.18, 0, Math.PI * 2);
-      ctx.strokeStyle = borderTheme.hex;
-      ctx.lineWidth = step.type === 'topup' ? 8 : 6;
+      ctx.moveTo(cx + Math.cos(a2)*l0, cy + Math.sin(a2)*l0);
+      ctx.lineTo(cx + Math.cos(a2)*l1, cy + Math.sin(a2)*l1);
+      ctx.strokeStyle = lit ? rgba(C.amber, .7*dim) : "rgba(255,255,255,.12)";
+      ctx.lineWidth = lit ? 2.4 : 1.6;
       ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, Math.max(radius, 10), 0, Math.PI * 2);
-      
-      const grad = ctx.createRadialGradient(
-        centerX - radius * 0.2, 
-        centerY - radius * 0.2, 
-        radius * 0.05, 
-        centerX, 
-        centerY, 
-        radius
-      );
-      
-      grad.addColorStop(0, `rgba(${activeColor.r}, ${activeColor.g}, ${activeColor.b}, 0.95)`);
-      grad.addColorStop(0.65, `rgba(${Math.max(0, activeColor.r - 35)}, ${Math.max(0, activeColor.g - 35)}, ${Math.max(0, activeColor.b - 15)}, 0.85)`);
-      grad.addColorStop(1, '#05040a');
-      
-      ctx.fillStyle = grad;
-      ctx.fill();
-
-      requestAnimationFrame(render);
     }
-
-    function toggleFullScreen() {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => {});
-      } else {
-        if (document.exitFullscreen) {
-          document.exitFullscreen();
-        }
-      }
+    if(lap > 0){
+      tracked("×" + (lap+1), cx, cy - sR - 17, Math.max(9, R*0.075), 1.6, rgba(C.amber,.8*dim), 800);
     }
+  }
 
-    stepStartTime = performance.now();
-    requestAnimationFrame(render);
-  </script>
+  /* --- centre readout --- */
+  var label, sub, big;
+  if(S.mode === "prep"){
+    label = "Get ready";
+    sub = "settle · let the breath out";
+    big = String(Math.max(1, Math.ceil(S.prep)));
+  } else {
+    label = p.label;
+    sub = p.sub;
+    big = (p.dur - S.pt).toFixed(1);
+  }
+
+  var lblSize = clamp(R*0.135, 10, 22);
+  var bigSize = clamp(R*0.60, 30, 128);
+  var subSize = clamp(R*0.088, 8.5, 13.5);
+
+  tracked(label.toUpperCase(), cx, cy - bigSize*0.52, lblSize, lblSize*0.30, rgba(col, .95*dim), 800);
+
+  ctx.font = "300 " + bigSize.toFixed(1) + "px " + FF;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(255,255,255," + (0.96*dim) + ")";
+  ctx.fillText(big, cx, cy + bigSize*0.06);
+
+  ctx.font = "600 " + subSize.toFixed(1) + "px " + FF;
+  ctx.fillStyle = "rgba(255,255,255," + (0.42*dim) + ")";
+  ctx.fillText(sub, cx, cy + bigSize*0.55);
+
+  /* --- sparks --- */
+  if(sparks.length){
+    ctx.globalCompositeOperation = "lighter";
+    for(var s=sparks.length-1;s>=0;s--){
+      var sp = sparks[s];
+      sp.x += sp.vx*dt; sp.y += sp.vy*dt;
+      sp.vy += 26*dt; sp.vx *= 0.985;
+      sp.life -= sp.dk*dt;
+      if(sp.life <= 0){ sparks.splice(s,1); continue; }
+      drawGlow(SPR[sp.c].dot, sp.x, sp.y, sp.sz*(1+ (1-sp.life)*2.2), sp.life*0.55*dim);
+    }
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1;
+  }
+
+  /* --- breath curve strip --- */
+  drawCurve(now, col, dim);
+
+  ctx.globalAlpha = 1;
+}
+
+function drawCurve(now, col, dim){
+  if(!curve.length || geo.waveW < 120) return;
+  var x0 = geo.waveX, y0 = geo.waveY + 8, w = geo.waveW, h = geo.waveH - 16;
+  if(h < 18) return;
+  var cp = cycleProgress();
+  var i, pt;
+
+  // baseline
+  ctx.strokeStyle = "rgba(255,255,255,.06)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0 + h + 0.5);
+  ctx.lineTo(x0 + w, y0 + h + 0.5);
+  ctx.stroke();
+
+  // phase dividers
+  var ps = phases(), acc = 0, total = cycleLen();
+  ctx.strokeStyle = "rgba(255,255,255,.07)";
+  for(i=0;i<ps.length-1;i++){
+    acc += ps[i].dur;
+    var dx = x0 + w*(acc/total);
+    ctx.beginPath();
+    ctx.moveTo(dx, y0); ctx.lineTo(dx, y0+h);
+    ctx.stroke();
+  }
+
+  // fill under full curve
+  ctx.beginPath();
+  ctx.moveTo(x0, y0 + h);
+  for(i=0;i<curve.length;i++){
+    pt = curve[i];
+    ctx.lineTo(x0 + w*pt[0], y0 + h - h*pt[1]);
+  }
+  ctx.lineTo(x0 + w, y0 + h);
+  ctx.closePath();
+  ctx.fillStyle = waveGrad || "rgba(255,255,255,.08)";
+  ctx.globalAlpha = 0.5*dim;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // ghost stroke
+  ctx.beginPath();
+  for(i=0;i<curve.length;i++){
+    pt = curve[i];
+    var X = x0 + w*pt[0], Y = y0 + h - h*pt[1];
+    if(i===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y);
+  }
+  ctx.strokeStyle = "rgba(255,255,255," + (0.20*dim) + ")";
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+
+  // traversed stroke
+  ctx.beginPath();
+  var started = false;
+  for(i=0;i<curve.length;i++){
+    pt = curve[i];
+    if(pt[0] > cp) break;
+    var X2 = x0 + w*pt[0], Y2 = y0 + h - h*pt[1];
+    if(!started){ ctx.moveTo(X2,Y2); started = true; } else ctx.lineTo(X2,Y2);
+  }
+  if(started){
+    ctx.strokeStyle = rgba(col, .92*dim);
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+  }
+
+  // playhead
+  var px = x0 + w*cp;
+  var py = y0 + h - h*volume();
+  ctx.globalCompositeOperation = "lighter";
+  drawGlow(SPR.white.dot, px, py, 8, .6*dim);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+  ctx.beginPath();
+  ctx.arc(px, py, 2.6, 0, 6.2832);
+  ctx.fillStyle = "rgba(255,255,255,"+(0.95*dim)+")";
+  ctx.fill();
+}
+
+/* ════════════════════════════════════════════════════════════
+   11. HUD (updated only when values change)
+   ════════════════════════════════════════════════════════════ */
+
+var lastSec = -1, lastSegProg = -1;
+function fmtTime(s){
+  var m = Math.floor(s/60), ss = Math.floor(s%60);
+  return m + ":" + (ss < 10 ? "0" : "") + ss;
+}
+function updateHud(){
+  var sec = Math.floor(S.elapsed);
+  if(sec !== lastSec){
+    lastSec = sec;
+    el.hudTime.textContent = fmtTime(S.elapsed);
+    var tgt = proto().targetMin*60;
+    el.targetFill.style.width = clamp(S.elapsed/tgt,0,1)*100 + "%";
+  }
+  if(segFills.length){
+    var pr = clamp(S.pt/cur().dur, 0, 1);
+    if(Math.abs(pr - lastSegProg) > 0.004){
+      lastSegProg = pr;
+      var f = segFills[S.phase];
+      if(f) f.style.transform = "scaleX(" + pr.toFixed(3) + ")";
+    }
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   12. LOOP + ADAPTIVE TIER
+   ════════════════════════════════════════════════════════════ */
+
+var last = 0, acc = 0, samples = 0, slow = 0, fast = 0;
+
+function frame(ts){
+  requestAnimationFrame(frame);
+  if(!last){ last = ts; return; }
+  var dt = (ts - last)/1000;
+  last = ts;
+  if(dt > 0.25) dt = 0.25;
+
+  if(S.mode !== "paused") advance(dt);
+  draw(ts/1000, dt);
+  updateHud();
+
+  // adaptive quality: watch a rolling window of frame times
+  if(!tierLocked){
+    acc += dt; samples++;
+    if(samples >= 45){
+      var avg = acc/samples;
+      acc = 0; samples = 0;
+      if(avg > 0.026){ slow++; fast = 0; } else if(avg < 0.019){ fast++; slow = 0; } else { slow = 0; fast = 0; }
+      if(slow >= 2 && tier > 0){ tier--; slow = 0; applyTier(); }
+      else if(fast >= 6 && tier < 2){ tier++; fast = 0; applyTier(); }
+    }
+  }
+}
+function applyTier(){
+  rebuildParticles();
+  curve = buildCurve();
+  layout();
+}
+
+/* ════════════════════════════════════════════════════════════
+   13. BOOT
+   ════════════════════════════════════════════════════════════ */
+
+var rsTimer = 0;
+window.addEventListener("resize", function(){
+  clearTimeout(rsTimer);
+  rsTimer = setTimeout(layout, 90);
+});
+window.addEventListener("orientationchange", function(){ setTimeout(layout, 250); });
+document.addEventListener("fullscreenchange", function(){ setTimeout(layout, 120); });
+
+if(reduceMotion){ tier = 0; tierLocked = true; qualityMode = 0; el.btnQuality.textContent = "LITE"; }
+
+buildVariants();
+buildTimeline();
+paintPanel();
+paintTransport();
+rebuildParticles();
+curve = buildCurve();
+layout();
+requestAnimationFrame(frame);
+
+})();
+</script>
 </body>
 </html>
